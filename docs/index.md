@@ -6,7 +6,7 @@ hide:
   - toc
 ---
 
-<div class="wp-introduction" markdown>
+<div id="introduction" class="wp-introduction" markdown>
 
 <span class="wp-introduction__eyebrow">INTRODUCTION</span>
 

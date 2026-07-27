@@ -1,32 +1,42 @@
 {% extends "main.html" %}
 
 {% block hero %}
-  <section class="wp-hero" data-wormhole-hero aria-labelledby="wp-hero-title">
-    <div class="wp-hero__fallback" aria-hidden="true"></div>
-    <canvas class="wp-hero__canvas" data-wormhole-canvas aria-hidden="true"></canvas>
+  {% set is_korean = config.theme.language == "ko" %}
+  <section class="wp-hero" aria-labelledby="wp-hero-title">
     <div class="wp-hero__veil" aria-hidden="true"></div>
 
     <div class="wp-hero__inner md-grid md-typeset">
       <div class="wp-hero__copy">
         <p class="wp-hero__eyebrow">WORMHOLE PORTAL · UNREAL ENGINE</p>
-        <h1 id="wp-hero-title">A window between worlds.</h1>
+        <h1 id="wp-hero-title">
+          {{ "세계와 세계를 잇는 창." if is_korean else "A window between worlds." }}
+        </h1>
         <p class="wp-hero__lead">
-          Physically inspired lensing. Seamless transit. One continuous
-          experience across connected spaces.
+          {% if is_korean %}
+            물리 법칙에서 영감을 받은 렌즈 효과와 매끄러운 이동으로,
+            연결된 공간을 하나의 연속된 경험으로 만드세요.
+          {% else %}
+            Physically inspired lensing. Seamless transit. One continuous
+            experience across connected spaces.
+          {% endif %}
         </p>
         <div class="wp-hero__actions">
           <a class="wp-hero__button wp-hero__button--primary" href="{{ 'getting-started/' | url }}">
-            Get started
+            {{ "시작하기" if is_korean else "Get started" }}
           </a>
           <a class="wp-hero__button" href="{{ 'features/' | url }}">
-            Explore features
+            {{ "기능 살펴보기" if is_korean else "Explore features" }}
           </a>
         </div>
       </div>
     </div>
 
-    <a class="wp-hero__scroll" href="#linked-spaces-one-continuous-world" aria-label="Read the introduction">
-      <span>Introduction</span>
+    <a
+      class="wp-hero__scroll"
+      href="#introduction"
+      aria-label="{{ '소개 읽기' if is_korean else 'Read the introduction' }}"
+    >
+      <span>{{ "소개" if is_korean else "Introduction" }}</span>
       <i aria-hidden="true"></i>
     </a>
   </section>

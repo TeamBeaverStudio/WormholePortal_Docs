@@ -1,9 +1,9 @@
 /*
  * Header utilities
  *
- * Search is the primary header action. The palette toggle follows it as a
- * compact utility button. Repository UI is intentionally not displayed because
- * the plugin is distributed through Fab.
+ * Search is the primary header action. The palette and language selectors
+ * follow it as compact utility buttons. Repository UI is intentionally not
+ * displayed because the plugin is distributed through Fab.
  */
 
 .md-header__inner > .md-search,
