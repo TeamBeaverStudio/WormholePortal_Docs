@@ -1,65 +1,23 @@
 ---
-title: Wormhole Portal
-description: Official documentation for the Wormhole Portal plugin for Unreal Engine.
+template: home.html
+title: Home
+description: Introduction to the Wormhole Portal plugin for Unreal Engine.
 hide:
-  - navigation
   - toc
 ---
 
-<section class="wp-hero" markdown>
+<div class="wp-introduction" markdown>
 
-<span class="wp-eyebrow">UNREAL ENGINE PLUGIN</span>
+<span class="wp-introduction__eyebrow">INTRODUCTION</span>
 
-# Connect distant spaces through seamless portals.
+## Linked spaces, one continuous world.
 
-Wormhole Portal brings real-time portal rendering and traversal tools into
-Unreal Engine, with systems for gameplay, streaming, audio, and lighting.
+Wormhole Portal is an Unreal Engine plugin for building connected spaces that
+look and behave as parts of the same world. Its physically inspired rendering
+path bends the view through a configurable throat and transition field,
+revealing the linked destination without relying on a flat portal surface.
 
-[Explore the feature set](#what-wormhole-portal-covers){ .md-button .md-button--primary }
-[View on GitHub](https://github.com/TeamBeaverStudio/WormholePortal_Docs){ .md-button }
-
-</section>
-
-## What Wormhole Portal covers
-
-<div class="grid cards wp-feature-grid" markdown>
-
--   **Wormhole rendering**
-
-    Build connected views between distant spaces while preserving a convincing
-    sense of depth and continuity.
-
--   **Actor transit**
-
-    Move gameplay actors through linked portals as part of the same connected
-    experience.
-
--   **Portal-aware tracing**
-
-    Continue supported spatial queries through portal connections.
-
--   **World Partition streaming**
-
-    Coordinate remote portal destinations with large-world streaming.
-
--   **Spatial audio transmission**
-
-    Carry spatial sound information across connected spaces.
-
--   **Portal lighting and shadows**
-
-    Support lighting cues and source shadows that help both spaces feel
-    visually connected.
+Portal-aware systems carry the connection beyond rendering, supporting transit,
+spatial queries, world streaming, audio, and light across the boundary.
 
 </div>
-
-## Documentation roadmap
-
-This site is being built from the Home page outward. The next sections will
-cover installation, your first portal pair, feature guides, configuration,
-troubleshooting, and advanced rendering topics.
-
-!!! note "Starting point"
-
-    The Zensical site foundation is now in place. Content and screenshots will
-    be added as each documentation section is completed.

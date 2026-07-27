@@ -3,6 +3,14 @@
 The official Wormhole Portal documentation site, built with
 [Zensical](https://zensical.org/) and prepared for GitHub Pages.
 
+## One-click preview on Windows
+
+Double-click `PreviewDocs.cmd`.
+
+The preview server starts and the documentation opens in your default browser.
+Keep the command window open while previewing, and close it when finished.
+The first launch also prepares the local Zensical environment when needed.
+
 ## Run locally on Windows
 
 ```powershell
