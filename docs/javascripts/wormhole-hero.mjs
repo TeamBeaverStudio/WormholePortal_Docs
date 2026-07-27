@@ -31,12 +31,6 @@ mat2 rotate2d(float angle) {
   return mat2(c, -s, s, c);
 }
 
-float hash21(vec2 value) {
-  value = fract(value * vec2(123.34, 456.21));
-  value += dot(value, value + 45.32);
-  return fract(value.x * value.y);
-}
-
 vec2 skyCoordinates(vec2 position) {
   float viewportAspect = uResolution.x / max(uResolution.y, 1.0);
   const float imageAspect = 1.77777777778;
@@ -55,23 +49,54 @@ vec2 skyCoordinates(vec2 position) {
   return clamp(normalized + 0.5, 0.001, 0.999);
 }
 
-vec3 sampleSky(vec2 position) {
-  vec3 encoded = texture(uSky, skyCoordinates(position)).rgb;
+vec3 sampleSkyLod(vec2 position, float lod) {
+  vec3 encoded = textureLod(
+    uSky,
+    skyCoordinates(position),
+    lod
+  ).rgb;
   vec3 linearColor = pow(encoded, vec3(2.2));
   return linearColor * mix(0.72, 0.92, uDark);
 }
 
-float softRing(
+vec3 sampleSky(vec2 position) {
+  return sampleSkyLod(position, 0.0);
+}
+
+float annulusMask(
   float radius,
-  float center,
-  float halfWidth,
-  float feather
+  float innerRadius,
+  float outerRadius,
+  float antialias
 ) {
-  return 1.0 - smoothstep(
-    halfWidth - feather,
-    halfWidth + feather,
-    abs(radius - center)
+  return smoothstep(
+    innerRadius - antialias,
+    innerRadius + antialias,
+    radius
+  ) * (
+    1.0 - smoothstep(
+      outerRadius - antialias,
+      outerRadius + antialias,
+      radius
+    )
   );
+}
+
+float glassBell(float coordinate) {
+  return pow(
+    max(4.0 * coordinate * (1.0 - coordinate), 0.0),
+    0.72
+  );
+}
+
+float glassSlope(float coordinate) {
+  float bell = 4.0 * coordinate * (1.0 - coordinate);
+  return (coordinate * 2.0 - 1.0) * bell;
+}
+
+float gaussianRing(float radius, float center, float width) {
+  float coordinate = (radius - center) / max(width, 0.0001);
+  return exp(-coordinate * coordinate);
 }
 
 float smootherStep01(float value) {
@@ -81,175 +106,309 @@ float smootherStep01(float value) {
   );
 }
 
+vec3 renderGlassLayer(
+  vec3 underColor,
+  vec2 skyPosition,
+  vec2 localPosition,
+  float innerRadius,
+  float outerRadius,
+  float bendAmount,
+  float shadeAmount,
+  float lod
+) {
+  float radius = max(length(localPosition), 0.0001);
+  float antialias = max(fwidth(radius) * 2.2, 0.0014);
+  float mask = annulusMask(
+    radius,
+    innerRadius,
+    outerRadius,
+    antialias
+  );
+  float rimSupport = max(
+    innerRadius * 0.025 + antialias,
+    outerRadius * 0.012 + antialias
+  );
+  if (
+    radius < innerRadius - rimSupport * 3.0
+    || radius > outerRadius + rimSupport * 3.0
+  ) {
+    return underColor;
+  }
+
+  float coordinate = clamp(
+    (radius - innerRadius)
+    / max(outerRadius - innerRadius, 0.0001),
+    0.0,
+    1.0
+  );
+  float curvature = glassBell(coordinate);
+  vec2 direction = localPosition / radius;
+  float refraction = bendAmount * glassSlope(coordinate);
+  vec3 refracted = sampleSkyLod(
+    skyPosition + direction * refraction,
+    lod
+  );
+  refracted = mix(
+    refracted,
+    vec3(0.012, 0.009, 0.028),
+    0.16
+  );
+  vec3 result = mix(
+    underColor,
+    refracted,
+    mask * (0.68 + curvature * 0.2)
+  );
+
+  float facing = 0.5 + 0.5 * dot(
+    direction,
+    normalize(vec2(0.55, -0.83))
+  );
+  float directionalShade = mix(1.1, 0.84, facing);
+  result *= 1.0 - mask * (
+    0.11 + shadeAmount * curvature
+  ) * directionalShade;
+  result += mix(
+    vec3(0.018, 0.014, 0.036),
+    vec3(0.052, 0.032, 0.042),
+    facing
+  ) * mask * curvature * 0.28;
+
+  float innerRim = gaussianRing(
+    radius,
+    innerRadius,
+    innerRadius * 0.025 + antialias
+  );
+  float outerRim = gaussianRing(
+    radius,
+    outerRadius,
+    outerRadius * 0.012 + antialias
+  );
+  float rim = min(innerRim * 0.62 + outerRim, 1.0);
+  result *= 1.0 - rim * 0.24;
+  result += vec3(0.052, 0.038, 0.068)
+    * rim
+    * (0.16 + 0.24 * facing);
+
+  return result;
+}
+
 void main() {
   vec2 resolution = max(uResolution, vec2(1.0));
   vec2 screenPosition = (
     2.0 * gl_FragCoord.xy - resolution
   ) / resolution.y;
-  vec2 basePosition = screenPosition - uCenter;
-  vec2 pointerOffset = uPointer * vec2(0.055, 0.04);
-  vec2 position = basePosition - pointerOffset;
-  position = rotate2d(uPointer.x * 0.026) * position;
-  position.x *= 1.0 + uPointer.y * 0.025;
-
+  vec2 position = screenPosition - uCenter;
+  float lensRadius = mix(0.43, 0.52, uQuality);
   float radius = max(length(position), 0.0001);
-  float angle = atan(position.y, position.x);
-  float criticalRadius = mix(0.55, 0.58, uQuality);
-  float lensRange = mix(0.81, 0.86, uQuality);
-  float transitionRadius =
-    criticalRadius + lensRange * LENS_RANGE_MULTIPLIER;
-  float sheenTransitionRadius = 1.18;
+  vec2 radialDirection = position / radius;
   float edgeAntialias = max(fwidth(radius) * 2.2, 0.0014);
   float inside = 1.0 - smoothstep(
-    criticalRadius - edgeAntialias * 2.0,
-    criticalRadius + edgeAntialias * 2.0,
+    lensRadius - edgeAntialias * 3.0,
+    lensRadius + edgeAntialias * 3.0,
     radius
   );
-  float transitionCoordinate = (
-    radius - criticalRadius
-  ) / (transitionRadius - criticalRadius);
-  float transitionProgress = clamp(
-    transitionCoordinate,
+
+  vec3 color = sampleSky(screenPosition);
+  float normalizedRadius = clamp(
+    radius / lensRadius,
     0.0,
     1.0
   );
-  float farLens = (
-    1.0 - smootherStep01(transitionProgress)
-  ) * exp(-5.0 * transitionProgress);
-  float criticalDistance = abs(radius - criticalRadius);
-  vec2 radialDirection = position / radius;
-  float foldedRadius = radius * (
+  float gentleBulge = lensRadius
+    * 0.012
+    * normalizedRadius
+    * (1.0 - normalizedRadius)
+    * (1.0 - normalizedRadius);
+  vec3 interior = sampleSkyLod(
+    screenPosition - radialDirection * gentleBulge,
+    0.8
+  );
+  float cavityAttenuation = mix(
+    0.08,
+    0.62,
+    smootherStep01(normalizedRadius)
+  );
+  interior *= cavityAttenuation;
+  interior += vec3(0.006, 0.004, 0.016)
+    * (1.0 - normalizedRadius)
+    * 0.35;
+  color = mix(color, interior, inside * 0.97);
+
+  float exteriorCoordinate = clamp(
+    (radius - lensRadius)
+    / (
+      lensRadius
+      * max(LENS_RANGE_MULTIPLIER - 1.0, 0.0001)
+    ),
+    0.0,
     1.0
-    + 0.018 * sin(angle * 2.0 + 0.42)
-    + 0.009 * sin(angle - 0.68)
   );
-  float shellFeather = max(edgeAntialias * 2.6, 0.005);
-  float shellOuter = softRing(
-    foldedRadius,
-    criticalRadius * 0.9,
-    criticalRadius * 0.11,
-    shellFeather
-  );
-  float shellMiddle = softRing(
-    foldedRadius,
-    criticalRadius * 0.69,
-    criticalRadius * 0.075,
-    shellFeather
-  );
-  float shellInner = softRing(
-    foldedRadius,
-    criticalRadius * 0.5,
-    criticalRadius * 0.055,
-    shellFeather
-  );
-  float shellCore = softRing(
-    foldedRadius,
-    criticalRadius * 0.33,
-    criticalRadius * 0.04,
-    shellFeather
-  );
-  float foldShift = criticalRadius * (
-    -0.18 * shellOuter
-    + 0.13 * shellMiddle
-    - 0.09 * shellInner
-    + 0.06 * shellCore
-  );
-  float outerShift = (
-    -criticalRadius * 0.018 * farLens * farLens
-  );
-  float radialShift = mix(outerShift, foldShift, inside);
-  vec2 lensCoordinates = (
-    basePosition + radialDirection * radialShift
-  );
-
-  vec3 galaxyUniverse = sampleSky(lensCoordinates);
-  vec3 color = galaxyUniverse;
-
-  float glassShade = inside * (
-    shellOuter * 0.31
-    + shellMiddle * 0.27
-    + shellInner * 0.22
-    + shellCore * 0.15
-  );
-  color *= 1.0 - glassShade;
-
-  float warmReflection = 0.5 + 0.5 * cos(angle + 0.58);
-  float glassReflection = inside * (
-    shellOuter * 0.044
-    + shellMiddle * 0.035
-    + shellInner * 0.026
-    + shellCore * 0.018
-  );
-  vec3 glassTint = mix(
-    vec3(0.04, 0.055, 0.09),
-    vec3(0.09, 0.063, 0.055),
-    warmReflection
-  );
-  color += glassTint * glassReflection;
-
-  float throatRadius = criticalRadius * 0.18;
-  float throatMask = 1.0 - smoothstep(
-    throatRadius - edgeAntialias * 1.35,
-    throatRadius + edgeAntialias * 1.35,
+  float exteriorMask = smoothstep(
+    lensRadius - edgeAntialias,
+    lensRadius + edgeAntialias,
     radius
   );
-  vec3 throatUniverse = vec3(0.0);
+  float exteriorHaze = exteriorMask
+    * (1.0 - smootherStep01(exteriorCoordinate));
+  color *= 1.0 - exteriorHaze * 0.014;
 
-  if (radius < throatRadius + 0.04) {
-    float normalizedThroat = clamp(
-      radius / throatRadius,
+  vec2 layer1 = position;
+  vec2 layer2 = position
+    - vec2(-0.005, 0.008) * lensRadius;
+  vec2 layer3 = position
+    - vec2(-0.009, 0.013) * lensRadius;
+  vec2 layer4 = position
+    - vec2(-0.012, 0.017) * lensRadius;
+  vec2 layer5 = position
+    - vec2(-0.014, 0.019) * lensRadius;
+
+  color = renderGlassLayer(
+    color,
+    screenPosition,
+    layer1,
+    lensRadius * 0.76,
+    lensRadius * 0.985,
+    lensRadius * 0.01,
+    0.68,
+    2.2
+  );
+  color = renderGlassLayer(
+    color,
+    screenPosition,
+    layer2,
+    lensRadius * 0.575,
+    lensRadius * 0.72,
+    lensRadius * -0.008,
+    0.66,
+    2.65
+  );
+  color = renderGlassLayer(
+    color,
+    screenPosition,
+    layer3,
+    lensRadius * 0.415,
+    lensRadius * 0.535,
+    lensRadius * 0.006,
+    0.6,
+    3.05
+  );
+  color = renderGlassLayer(
+    color,
+    screenPosition,
+    layer4,
+    lensRadius * 0.295,
+    lensRadius * 0.385,
+    lensRadius * -0.004,
+    0.54,
+    3.45
+  );
+  color = renderGlassLayer(
+    color,
+    screenPosition,
+    layer5,
+    lensRadius * 0.235,
+    lensRadius * 0.27,
+    lensRadius * 0.003,
+    0.44,
+    3.8
+  );
+
+  float upperCavity = inside
+    * (1.0 - smoothstep(0.24, 0.78, normalizedRadius))
+    * smoothstep(-0.25, 0.82, radialDirection.y);
+  color *= 1.0 - upperCavity * 0.55;
+  vec2 upperWellPosition = (
+    position - vec2(0.0, lensRadius * 0.18)
+  ) / (lensRadius * vec2(0.34, 0.3));
+  float upperWell = exp(
+    -dot(upperWellPosition, upperWellPosition)
+  ) * inside;
+  color *= 1.0 - upperWell * 0.34;
+
+  float outerRim = gaussianRing(
+    radius,
+    lensRadius,
+    lensRadius * 0.014 + edgeAntialias
+  );
+  color *= 1.0 - outerRim * 0.34;
+  color += vec3(0.026, 0.028, 0.042)
+    * outerRim
+    * 0.022;
+
+  vec2 throatPosition = position
+    - vec2(-0.014, 0.019) * lensRadius;
+  float throatDistance = length(throatPosition);
+  float throatRadius = lensRadius * 0.165;
+  float throatMask = 1.0 - smoothstep(
+    throatRadius - edgeAntialias * 2.0,
+    throatRadius + edgeAntialias * 2.0,
+    throatDistance
+  );
+  vec3 throatColor = vec3(0.0);
+
+  if (throatDistance < throatRadius + edgeAntialias * 4.0) {
+    float throatCoordinate = clamp(
+      throatDistance / throatRadius,
       0.0,
       1.0
     );
-    vec2 remoteCoordinates = rotate2d(
-      -0.26 + uTime * 0.006
-    ) * position / max(throatRadius, 0.001) * 0.68;
+    float phase = 0.01 * sin(uTime * 0.11);
+    float breathing = 1.0 + 0.008 * sin(uTime * 0.16);
+    vec2 remoteCoordinates = rotate2d(-0.12 + phase)
+      * throatPosition
+      / throatRadius
+      * (0.38 * breathing);
     remoteCoordinates += vec2(
-      -uPointer.x * 0.035,
-      uPointer.y * 0.025
-    );
+      -uPointer.x,
+      uPointer.y
+    ) * 0.006;
+    remoteCoordinates += vec2(0.055, -0.025);
 
-    throatUniverse = sampleSky(remoteCoordinates);
-    float throatDepth = 1.0 - normalizedThroat;
-    throatUniverse = mix(
-      throatUniverse * 0.72,
-      vec3(0.008, 0.085, 0.098),
-      0.28 + throatDepth * 0.2
+    vec3 remoteSky = sampleSkyLod(
+      remoteCoordinates,
+      1.25
     );
+    throatColor = mix(
+      remoteSky * 0.7,
+      vec3(0.004, 0.055, 0.068),
+      0.26
+    );
+    float aperture = 1.0 - smoothstep(
+      0.62,
+      1.0,
+      throatCoordinate
+    );
+    throatColor *= mix(0.34, 1.0, aperture);
+    float centerDepth = exp(
+      -pow(throatCoordinate / 0.52, 2.0)
+    );
+    throatColor += vec3(0.004, 0.04, 0.052)
+      * centerDepth
+      * 0.22;
+    vec2 echoPosition = throatPosition
+      + vec2(0.0, throatRadius * 0.58);
+    vec2 echoShape = echoPosition
+      / max(throatRadius, 0.0001)
+      * vec2(2.4, 3.15);
+    float lowerEcho = exp(-dot(echoShape, echoShape));
+    throatColor += vec3(0.006, 0.07, 0.082)
+      * lowerEcho
+      * 0.42;
   }
 
-  color = mix(color, throatUniverse, throatMask);
-  float throatEdge = exp(-pow(
-    (radius - throatRadius)
-    / (0.004 + edgeAntialias * 1.8),
-    2.0
-  ));
-  color *= 1.0 - throatEdge * 0.42;
-  color += vec3(0.02, 0.11, 0.14) * throatEdge * 0.08;
-
-  float criticalWidth = 0.0045 + edgeAntialias * 1.35;
-  float criticalLine = exp(
-    -pow(criticalDistance / criticalWidth, 2.0)
+  color = mix(color, throatColor, throatMask);
+  float throatRim = gaussianRing(
+    throatDistance,
+    throatRadius,
+    lensRadius * 0.012 + edgeAntialias
   );
-  color *= 1.0 - criticalLine * 0.34;
-
-  float arcA = pow(0.5 + 0.5 * cos(angle - 0.65), 7.0);
-  float arcB = pow(0.5 + 0.5 * cos(angle + 2.25), 10.0);
-  float caustic = exp(-criticalDistance * 31.0) * (arcA + arcB * 0.55);
-  color += vec3(0.15, 0.22, 0.28) * caustic * 0.09;
-
-  float carrier = 1.0 - smootherStep01(
-    (radius - criticalRadius * 1.1) /
-    (sheenTransitionRadius - criticalRadius * 1.1)
-  );
-  float lensSheen = carrier * (1.0 - inside) * 0.018;
-  color += vec3(0.18, 0.32, 0.48) * lensSheen;
+  color *= 1.0 - throatRim * 0.52;
+  color += vec3(0.012, 0.065, 0.074)
+    * throatRim
+    * 0.035;
 
   float vignette = smoothstep(0.42, 1.55, length(screenPosition));
   color *= 1.0 - vignette * 0.48;
-
-  float grain = hash21(gl_FragCoord.xy) - 0.5;
-  color += grain * 0.004 * mix(0.55, 1.0, uDark);
 
   color = max(color, vec3(0.0));
   color = 1.0 - exp(-color * 1.18);
