@@ -22,7 +22,6 @@ uniform float uTime;
 uniform float uDark;
 uniform float uQuality;
 
-const float TAU = 6.28318530718;
 const float LENS_RANGE_MULTIPLIER = 3.0;
 
 mat2 rotate2d(float angle) {
@@ -37,15 +36,12 @@ float hash21(vec2 value) {
   return fract(value.x * value.y);
 }
 
-vec2 hash22(vec2 value) {
-  float first = hash21(value);
-  return vec2(first, hash21(value + first + 17.17));
-}
-
 float noise2(vec2 point) {
   vec2 cell = floor(point);
   vec2 local = fract(point);
-  local = local * local * (3.0 - 2.0 * local);
+  local = local * local * local * (
+    local * (local * 6.0 - 15.0) + 10.0
+  );
 
   float a = hash21(cell);
   float b = hash21(cell + vec2(1.0, 0.0));
@@ -68,77 +64,73 @@ float fbm(vec2 point) {
   return value;
 }
 
-vec3 starLayer(vec2 uv, float scale, float seed, float time) {
-  vec2 grid = uv * scale;
-  vec2 cell = floor(grid);
-  vec2 local = fract(grid) - 0.5;
-  vec2 randomPair = hash22(cell + seed);
-  vec2 starPosition = (randomPair - 0.5) * 0.7;
+vec3 staticSpeckles(vec2 uv, float seed, float quality) {
+  vec2 primaryDomain = (
+    rotate2d(0.73 + seed * 0.013) * uv * 31.7
+    + vec2(seed * 2.17, -seed * 1.13)
+  );
+  float primary = pow(noise2(primaryDomain), 24.0);
+  float cluster = 0.28 + 0.72 * noise2(
+    rotate2d(-0.41) * uv * 4.9
+    + vec2(seed * 0.61, -seed * 0.37)
+  );
+  float speckles = primary * cluster;
 
-  float distanceToStar = length(local - starPosition);
-  float presence = smoothstep(0.955, 0.998, hash21(cell + seed * 3.7));
-  float sizeSeed = hash21(cell + seed + 8.3);
-  float size = mix(0.009, 0.043, pow(sizeSeed, 12.0));
-  float antialias = max(
-    scale * 2.2 / max(uResolution.y, 1.0),
-    0.001
-  );
-  float core = 1.0 - smoothstep(size, size + antialias, distanceToStar);
-  float halo = 0.012 / (distanceToStar + 0.035);
-  float twinkle = 0.8 + 0.2 * sin(
-    time * (0.7 + randomPair.x * 1.4) + randomPair.y * TAU
-  );
+  if (quality > 0.5) {
+    vec2 secondaryDomain = (
+      rotate2d(-1.07 + seed * 0.009) * uv * 67.3
+      + vec2(-seed * 1.47, seed * 2.31)
+    );
+    speckles += pow(noise2(secondaryDomain), 31.0) * 0.42;
+  }
 
   vec3 cool = vec3(0.58, 0.72, 1.0);
   vec3 warm = vec3(1.0, 0.78, 0.57);
-  vec3 tint = mix(cool, warm, hash21(cell + seed + 29.0));
+  vec3 tint = mix(
+    cool,
+    warm,
+    noise2(rotate2d(0.29) * uv * 7.1 + seed * 0.73)
+  );
 
-  return tint * presence * (core + halo * 0.035) * twinkle;
+  return tint * speckles * 0.56;
 }
 
 vec3 universe(
   vec2 uv,
   float seed,
-  float time,
   float dark,
   float quality,
   vec3 nebulaTint
 ) {
   vec2 rotated = rotate2d(0.24 + seed * 0.07) * uv;
-  vec2 drift = vec2(time * 0.006, -time * 0.004);
-  float broadNoise = fbm(rotated * 0.58 + drift + seed);
+  float broadNoise = fbm(
+    rotated * 0.58 + vec2(seed * 0.41, -seed * 0.29)
+  );
   float nebulaNoise = broadNoise * 0.92;
 
   if (quality > 0.5) {
     float fineNoise = fbm(
-      rotated * 1.34 - drift * 1.7 + seed * 0.37
+      rotate2d(-0.47) * rotated * 1.34
+      + vec2(-seed * 0.23, seed * 0.37)
     );
     nebulaNoise = broadNoise * 0.72 + fineNoise * 0.42;
   }
 
-  float galaxyLane = exp(
-    -abs(rotated.y + 0.16 * sin(rotated.x * 0.72 + seed)) * 2.8
+  float nebulaShape = fbm(
+    rotate2d(0.91) * rotated * 0.31
+    + vec2(seed * 0.17, seed * 0.43)
   );
   float nebula = smoothstep(
-    0.36,
-    0.82,
+    0.43,
+    0.86,
     nebulaNoise
-  ) * galaxyLane;
+  ) * smoothstep(0.31, 0.74, nebulaShape);
 
   vec3 lightBase = vec3(0.014, 0.026, 0.055);
   vec3 darkBase = vec3(0.0015, 0.003, 0.009);
   vec3 color = mix(lightBase, darkBase, dark);
   color += nebulaTint * nebula * mix(0.42, 0.64, dark);
-  color += starLayer(rotated + drift, 24.0, seed + 2.0, time);
-
-  if (quality > 0.5) {
-    color += starLayer(
-      rotated * 1.37 - drift,
-      43.0,
-      seed + 13.0,
-      time * 1.13
-    ) * 0.62;
-  }
+  color += staticSpeckles(rotated, seed + 2.0, quality);
 
   return color;
 }
@@ -155,8 +147,9 @@ void main() {
   vec2 screenPosition = (
     2.0 * gl_FragCoord.xy - resolution
   ) / resolution.y;
+  vec2 basePosition = screenPosition - uCenter;
   vec2 pointerOffset = uPointer * vec2(0.055, 0.04);
-  vec2 position = screenPosition - uCenter - pointerOffset;
+  vec2 position = basePosition - pointerOffset;
   position = rotate2d(uPointer.x * 0.026) * position;
   position.x *= 1.0 + uPointer.y * 0.025;
 
@@ -175,15 +168,14 @@ void main() {
   float branch = step(criticalRadius, radius) * 2.0 - 1.0;
   float deflection = lensFalloff * 0.1 / (criticalDistance + 0.06);
 
-  vec2 localCoordinates = rotate2d(
-    branch * deflection * 0.34 + uTime * 0.002
+  vec2 warpedPosition = rotate2d(
+    branch * deflection * 0.34
   ) * position * (1.0 + deflection * 0.24);
-  localCoordinates += vec2(uPointer.x * 0.08, uPointer.y * 0.05);
+  vec2 localCoordinates = basePosition + warpedPosition - position;
 
   vec3 localUniverse = universe(
     localCoordinates,
     2.7,
-    uTime,
     uDark,
     uQuality,
     vec3(0.07, 0.18, 0.34)
@@ -212,7 +204,6 @@ void main() {
     remoteUniverse = universe(
       remoteCoordinates,
       19.4,
-      -uTime * 0.32,
       uDark,
       uQuality,
       vec3(0.18, 0.11, 0.3)
@@ -222,7 +213,6 @@ void main() {
       remoteUniverse += universe(
         remoteCoordinates * 0.72 + vec2(3.1, -1.7),
         31.8,
-        uTime * 0.18,
         uDark,
         0.0,
         vec3(0.03, 0.22, 0.24)
@@ -258,9 +248,7 @@ void main() {
   float vignette = smoothstep(0.42, 1.55, length(screenPosition));
   color *= 1.0 - vignette * 0.48;
 
-  float grain = hash21(
-    gl_FragCoord.xy + floor(uTime * 24.0)
-  ) - 0.5;
+  float grain = hash21(gl_FragCoord.xy) - 0.5;
   color += grain * 0.009 * mix(0.55, 1.0, uDark);
 
   color = max(color, vec3(0.0));
