@@ -21,6 +21,7 @@ uniform vec2 uCenter;
 uniform float uTime;
 uniform float uDark;
 uniform float uQuality;
+uniform sampler2D uSky;
 
 const float LENS_RANGE_MULTIPLIER = 3.0;
 
@@ -36,71 +37,41 @@ float hash21(vec2 value) {
   return fract(value.x * value.y);
 }
 
-float noise2(vec2 point) {
-  vec2 cell = floor(point);
-  vec2 local = fract(point);
-  local = local * local * local * (
-    local * (local * 6.0 - 15.0) + 10.0
+vec2 skyCoordinates(vec2 position) {
+  float viewportAspect = uResolution.x / max(uResolution.y, 1.0);
+  const float imageAspect = 1.77777777778;
+  vec2 normalized = vec2(
+    position.x / (2.0 * viewportAspect),
+    position.y * 0.5
   );
 
-  float a = hash21(cell);
-  float b = hash21(cell + vec2(1.0, 0.0));
-  float c = hash21(cell + vec2(0.0, 1.0));
-  float d = hash21(cell + vec2(1.0));
-
-  return mix(mix(a, b, local.x), mix(c, d, local.x), local.y);
-}
-
-float fbm(vec2 point) {
-  float value = 0.0;
-  float amplitude = 0.5;
-
-  for (int octave = 0; octave < 4; octave++) {
-    value += amplitude * noise2(point);
-    point = rotate2d(0.61) * point * 2.03 + vec2(11.7, 7.3);
-    amplitude *= 0.5;
+  if (viewportAspect > imageAspect) {
+    normalized.y *= imageAspect / viewportAspect;
+  }
+  else {
+    normalized.x *= viewportAspect / imageAspect;
   }
 
-  return value;
+  return clamp(normalized + 0.5, 0.001, 0.999);
 }
 
-vec3 universe(
-  vec2 uv,
-  float seed,
-  float dark,
-  float quality,
-  vec3 nebulaTint
+vec3 sampleSky(vec2 position) {
+  vec3 encoded = texture(uSky, skyCoordinates(position)).rgb;
+  vec3 linearColor = pow(encoded, vec3(2.2));
+  return linearColor * mix(0.72, 0.92, uDark);
+}
+
+float softRing(
+  float radius,
+  float center,
+  float halfWidth,
+  float feather
 ) {
-  vec2 rotated = rotate2d(0.24 + seed * 0.07) * uv;
-  float broadNoise = fbm(
-    rotated * 0.58 + vec2(seed * 0.41, -seed * 0.29)
+  return 1.0 - smoothstep(
+    halfWidth - feather,
+    halfWidth + feather,
+    abs(radius - center)
   );
-  float nebulaNoise = broadNoise * 0.92;
-
-  if (quality > 0.5) {
-    float fineNoise = fbm(
-      rotate2d(-0.47) * rotated * 1.34
-      + vec2(-seed * 0.23, seed * 0.37)
-    );
-    nebulaNoise = broadNoise * 0.72 + fineNoise * 0.42;
-  }
-
-  float nebulaShape = fbm(
-    rotate2d(0.91) * rotated * 0.31
-    + vec2(seed * 0.17, seed * 0.43)
-  );
-  float nebula = smoothstep(
-    0.43,
-    0.86,
-    nebulaNoise
-  ) * smoothstep(0.31, 0.74, nebulaShape);
-
-  vec3 lightBase = vec3(0.014, 0.026, 0.055);
-  vec3 darkBase = vec3(0.0015, 0.003, 0.009);
-  vec3 color = mix(lightBase, darkBase, dark);
-  color += nebulaTint * nebula * mix(0.42, 0.64, dark);
-
-  return color;
 }
 
 float smootherStep01(float value) {
@@ -128,83 +99,144 @@ void main() {
   float transitionRadius =
     criticalRadius + lensRange * LENS_RANGE_MULTIPLIER;
   float sheenTransitionRadius = 1.18;
-  float transitionCoordinate = (
-    radius - criticalRadius
-  ) / (transitionRadius - criticalRadius);
-  float lensFalloff = 1.0 - smootherStep01(transitionCoordinate);
-  float criticalDistance = abs(radius - criticalRadius);
-  float branch = step(criticalRadius, radius) * 2.0 - 1.0;
-  float deflection = lensFalloff * 0.1 / (criticalDistance + 0.06);
-
-  vec2 warpedPosition = rotate2d(
-    branch * deflection * 0.34
-  ) * position * (1.0 + deflection * 0.24);
-  vec2 localCoordinates = basePosition + warpedPosition - position;
-
-  vec3 localUniverse = universe(
-    localCoordinates,
-    2.7,
-    uDark,
-    uQuality,
-    vec3(0.07, 0.18, 0.34)
-  );
-
   float edgeAntialias = max(fwidth(radius) * 2.2, 0.0014);
   float inside = 1.0 - smoothstep(
     criticalRadius - edgeAntialias * 2.0,
     criticalRadius + edgeAntialias * 2.0,
     radius
   );
-  vec3 remoteUniverse = vec3(0.0);
+  float transitionCoordinate = (
+    radius - criticalRadius
+  ) / (transitionRadius - criticalRadius);
+  float transitionProgress = clamp(
+    transitionCoordinate,
+    0.0,
+    1.0
+  );
+  float farLens = (
+    1.0 - smootherStep01(transitionProgress)
+  ) * exp(-5.0 * transitionProgress);
+  float criticalDistance = abs(radius - criticalRadius);
+  vec2 radialDirection = position / radius;
+  float foldedRadius = radius * (
+    1.0
+    + 0.018 * sin(angle * 2.0 + 0.42)
+    + 0.009 * sin(angle - 0.68)
+  );
+  float shellFeather = max(edgeAntialias * 2.6, 0.005);
+  float shellOuter = softRing(
+    foldedRadius,
+    criticalRadius * 0.9,
+    criticalRadius * 0.11,
+    shellFeather
+  );
+  float shellMiddle = softRing(
+    foldedRadius,
+    criticalRadius * 0.69,
+    criticalRadius * 0.075,
+    shellFeather
+  );
+  float shellInner = softRing(
+    foldedRadius,
+    criticalRadius * 0.5,
+    criticalRadius * 0.055,
+    shellFeather
+  );
+  float shellCore = softRing(
+    foldedRadius,
+    criticalRadius * 0.33,
+    criticalRadius * 0.04,
+    shellFeather
+  );
+  float foldShift = criticalRadius * (
+    -0.18 * shellOuter
+    + 0.13 * shellMiddle
+    - 0.09 * shellInner
+    + 0.06 * shellCore
+  );
+  float outerShift = (
+    -criticalRadius * 0.018 * farLens * farLens
+  );
+  float radialShift = mix(outerShift, foldShift, inside);
+  vec2 lensCoordinates = (
+    basePosition + radialDirection * radialShift
+  );
 
-  if (radius < criticalRadius + 0.08) {
-    float normalizedRadius = clamp(
-      radius / criticalRadius,
+  vec3 galaxyUniverse = sampleSky(lensCoordinates);
+  vec3 color = galaxyUniverse;
+
+  float glassShade = inside * (
+    shellOuter * 0.31
+    + shellMiddle * 0.27
+    + shellInner * 0.22
+    + shellCore * 0.15
+  );
+  color *= 1.0 - glassShade;
+
+  float warmReflection = 0.5 + 0.5 * cos(angle + 0.58);
+  float glassReflection = inside * (
+    shellOuter * 0.044
+    + shellMiddle * 0.035
+    + shellInner * 0.026
+    + shellCore * 0.018
+  );
+  vec3 glassTint = mix(
+    vec3(0.04, 0.055, 0.09),
+    vec3(0.09, 0.063, 0.055),
+    warmReflection
+  );
+  color += glassTint * glassReflection;
+
+  float throatRadius = criticalRadius * 0.18;
+  float throatMask = 1.0 - smoothstep(
+    throatRadius - edgeAntialias * 1.35,
+    throatRadius + edgeAntialias * 1.35,
+    radius
+  );
+  vec3 throatUniverse = vec3(0.0);
+
+  if (radius < throatRadius + 0.04) {
+    float normalizedThroat = clamp(
+      radius / throatRadius,
       0.0,
       1.0
     );
-    float throatDepth = 1.0 - normalizedRadius;
     vec2 remoteCoordinates = rotate2d(
-      -0.32 + 1.18 * throatDepth * throatDepth + uTime * 0.011
-    ) * position / (0.15 + normalizedRadius * 0.78);
-    remoteCoordinates += vec2(-uPointer.x * 0.1, uPointer.y * 0.07);
-
-    remoteUniverse = universe(
-      remoteCoordinates,
-      19.4,
-      uDark,
-      uQuality,
-      vec3(0.18, 0.11, 0.3)
+      -0.26 + uTime * 0.006
+    ) * position / max(throatRadius, 0.001) * 0.68;
+    remoteCoordinates += vec2(
+      -uPointer.x * 0.035,
+      uPointer.y * 0.025
     );
 
-    if (uQuality > 0.5) {
-      remoteUniverse += universe(
-        remoteCoordinates * 0.72 + vec2(3.1, -1.7),
-        31.8,
-        uDark,
-        0.0,
-        vec3(0.03, 0.22, 0.24)
-      ) * 0.34;
-    }
+    throatUniverse = sampleSky(remoteCoordinates);
+    float throatDepth = 1.0 - normalizedThroat;
+    throatUniverse = mix(
+      throatUniverse * 0.72,
+      vec3(0.008, 0.085, 0.098),
+      0.28 + throatDepth * 0.2
+    );
   }
 
-  vec3 color = mix(localUniverse, remoteUniverse, inside);
-
-  float outerEcho = exp(-abs(radius - criticalRadius - 0.035) * 52.0);
-  float innerEcho = exp(-abs(radius - criticalRadius + 0.028) * 58.0);
-  color += localUniverse * outerEcho * 0.18;
-  color += remoteUniverse * innerEcho * 0.14;
+  color = mix(color, throatUniverse, throatMask);
+  float throatEdge = exp(-pow(
+    (radius - throatRadius)
+    / (0.004 + edgeAntialias * 1.8),
+    2.0
+  ));
+  color *= 1.0 - throatEdge * 0.42;
+  color += vec3(0.02, 0.11, 0.14) * throatEdge * 0.08;
 
   float criticalWidth = 0.0045 + edgeAntialias * 1.35;
   float criticalLine = exp(
     -pow(criticalDistance / criticalWidth, 2.0)
   );
-  color *= 1.0 - criticalLine * 0.965;
+  color *= 1.0 - criticalLine * 0.34;
 
   float arcA = pow(0.5 + 0.5 * cos(angle - 0.65), 7.0);
   float arcB = pow(0.5 + 0.5 * cos(angle + 2.25), 10.0);
   float caustic = exp(-criticalDistance * 31.0) * (arcA + arcB * 0.55);
-  color += vec3(0.16, 0.34, 0.52) * caustic * 0.34;
+  color += vec3(0.15, 0.22, 0.28) * caustic * 0.09;
 
   float carrier = 1.0 - smootherStep01(
     (radius - criticalRadius * 1.1) /
@@ -310,6 +342,12 @@ function createWormhole(hero) {
     gl.deleteProgram(program);
     throw new Error("WebGL could not create a vertex array.");
   }
+  const skyTexture = gl.createTexture();
+  if (!skyTexture) {
+    gl.deleteVertexArray(vertexArray);
+    gl.deleteProgram(program);
+    throw new Error("WebGL could not create the sky texture.");
+  }
 
   const uniforms = {
     resolution: gl.getUniformLocation(program, "uResolution"),
@@ -318,9 +356,11 @@ function createWormhole(hero) {
     time: gl.getUniformLocation(program, "uTime"),
     dark: gl.getUniformLocation(program, "uDark"),
     quality: gl.getUniformLocation(program, "uQuality"),
+    sky: gl.getUniformLocation(program, "uSky"),
   };
 
   const abortController = new AbortController();
+  const skyImage = new Image();
   const motionQuery = matchMedia("(prefers-reduced-motion: reduce)");
   const coarsePointerQuery = matchMedia("(pointer: coarse)");
   const pointerTarget = { x: 0, y: 0 };
@@ -331,6 +371,7 @@ function createWormhole(hero) {
   let isVisible = true;
   let isDisposed = false;
   let isContextLost = false;
+  let isSkyReady = false;
   let isMobile = false;
   let currentTheme = getThemeTarget();
   let targetTheme = currentTheme;
@@ -339,6 +380,24 @@ function createWormhole(hero) {
   gl.bindVertexArray(vertexArray);
   gl.disable(gl.DEPTH_TEST);
   gl.disable(gl.BLEND);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, skyTexture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA,
+    1,
+    1,
+    0,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    new Uint8Array([2, 4, 10, 255])
+  );
+  gl.uniform1i(uniforms.sky, 0);
 
   function resize() {
     const bounds = hero.getBoundingClientRect();
@@ -362,7 +421,7 @@ function createWormhole(hero) {
   }
 
   function draw(timestamp) {
-    if (isDisposed || isContextLost) {
+    if (isDisposed || isContextLost || !isSkyReady) {
       return;
     }
 
@@ -378,10 +437,12 @@ function createWormhole(hero) {
 
     const aspect = canvas.width / Math.max(canvas.height, 1);
     const centerX = isMobile ? 0 : Math.min(0.7, Math.max(0.42, aspect * 0.35));
-    const centerY = isMobile ? 0.28 : 0.02;
+    const centerY = isMobile ? 0.58 : 0.02;
 
     gl.useProgram(program);
     gl.bindVertexArray(vertexArray);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, skyTexture);
     gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
     gl.uniform2f(
       uniforms.pointer,
@@ -400,6 +461,7 @@ function createWormhole(hero) {
       animationFrame ||
       isDisposed ||
       isContextLost ||
+      !isSkyReady ||
       !isVisible ||
       document.hidden
     ) {
@@ -419,6 +481,7 @@ function createWormhole(hero) {
     if (
       isDisposed ||
       isContextLost ||
+      !isSkyReady ||
       !isVisible ||
       document.hidden
     ) {
@@ -517,10 +580,66 @@ function createWormhole(hero) {
   };
   motionQuery.addEventListener("change", handleMotionChange);
 
+  skyImage.decoding = "async";
+  skyImage.addEventListener("load", () => {
+    if (isDisposed || isContextLost) {
+      return;
+    }
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, skyTexture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      skyImage
+    );
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(
+      gl.TEXTURE_2D,
+      gl.TEXTURE_MIN_FILTER,
+      gl.LINEAR_MIPMAP_LINEAR
+    );
+
+    const anisotropy = gl.getExtension("EXT_texture_filter_anisotropic");
+    if (anisotropy) {
+      const maximum = gl.getParameter(
+        anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT
+      );
+      gl.texParameterf(
+        gl.TEXTURE_2D,
+        anisotropy.TEXTURE_MAX_ANISOTROPY_EXT,
+        Math.min(4, maximum)
+      );
+    }
+
+    isSkyReady = true;
+    resize();
+    draw(performance.now());
+    hero.classList.add("wp-hero--ready");
+    schedule();
+  }, {
+    once: true,
+    signal: abortController.signal,
+  });
+  skyImage.addEventListener("error", () => {
+    if (!isDisposed) {
+      hero.classList.add("wp-hero--fallback");
+      console.warn("[Wormhole Portal] Sky texture could not be loaded.");
+    }
+  }, {
+    once: true,
+    signal: abortController.signal,
+  });
+
   resize();
-  draw(performance.now());
-  hero.classList.add("wp-hero--ready");
-  schedule();
+  skyImage.src = new URL(
+    "../assets/wormhole-sky-v1.webp",
+    import.meta.url
+  ).href;
 
   return () => {
     isDisposed = true;
@@ -532,6 +651,7 @@ function createWormhole(hero) {
     intersectionObserver.disconnect();
     themeObserver.disconnect();
     motionQuery.removeEventListener("change", handleMotionChange);
+    gl.deleteTexture(skyTexture);
     gl.deleteVertexArray(vertexArray);
     gl.deleteProgram(program);
   };

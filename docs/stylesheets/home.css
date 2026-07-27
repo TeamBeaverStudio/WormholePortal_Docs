@@ -28,24 +28,34 @@
   background:
     radial-gradient(
       circle at 69% 49%,
-      rgb(14 25 45 / 10%) 0 12.5%,
-      rgb(0 0 0 / 96%) 13.2% 14.5%,
-      rgb(109 157 218 / 22%) 15%,
-      rgb(13 23 42 / 32%) 18%,
-      rgb(13 23 42 / 12%) 40%,
-      transparent 72%
+      rgb(20 152 166 / 62%) 0 2.6%,
+      rgb(5 23 35 / 92%) 3.5% 4.5%,
+      transparent 5.5%
     ),
     radial-gradient(
-      ellipse at 70% 50%,
-      rgb(35 91 126 / 38%),
-      transparent 60%
+      circle at 69% 49%,
+      transparent 0 10%,
+      rgb(15 13 29 / 68%) 12% 17%,
+      rgb(111 90 137 / 20%) 18% 21%,
+      rgb(15 14 31 / 60%) 23% 27%,
+      rgb(104 83 129 / 16%) 29% 33%,
+      rgb(12 18 35 / 42%) 35% 39%,
+      transparent 44%
     ),
-    radial-gradient(circle at 78% 34%, rgb(162 195 255 / 70%) 0 1px, transparent 1.5px),
-    radial-gradient(circle at 63% 27%, rgb(255 235 205 / 62%) 0 1px, transparent 1.5px),
-    radial-gradient(circle at 84% 63%, rgb(186 218 255 / 56%) 0 1px, transparent 1.5px),
-    radial-gradient(circle at 54% 68%, rgb(153 186 255 / 48%) 0 1px, transparent 1.5px),
-    linear-gradient(118deg, #02040a 6%, #07101e 55%, #02040a 100%);
-  background-size: auto, auto, 8rem 8rem, 11rem 11rem, 9rem 9rem, 13rem 13rem, auto;
+    linear-gradient(
+      174deg,
+      transparent 0 34%,
+      rgb(111 100 148 / 13%) 41%,
+      rgb(169 137 121 / 16%) 49%,
+      rgb(87 63 106 / 18%) 57%,
+      transparent 69%
+    ),
+    radial-gradient(
+      ellipse at 69% 50%,
+      rgb(39 91 122 / 24%),
+      transparent 58%
+    ),
+    linear-gradient(118deg, #02040a 6%, #0a0d1c 55%, #03040b 100%);
   transform: scale(1.03);
 }
 
