@@ -64,37 +64,6 @@ float fbm(vec2 point) {
   return value;
 }
 
-vec3 staticSpeckles(vec2 uv, float seed, float quality) {
-  vec2 primaryDomain = (
-    rotate2d(0.73 + seed * 0.013) * uv * 31.7
-    + vec2(seed * 2.17, -seed * 1.13)
-  );
-  float primary = pow(noise2(primaryDomain), 24.0);
-  float cluster = 0.28 + 0.72 * noise2(
-    rotate2d(-0.41) * uv * 4.9
-    + vec2(seed * 0.61, -seed * 0.37)
-  );
-  float speckles = primary * cluster;
-
-  if (quality > 0.5) {
-    vec2 secondaryDomain = (
-      rotate2d(-1.07 + seed * 0.009) * uv * 67.3
-      + vec2(-seed * 1.47, seed * 2.31)
-    );
-    speckles += pow(noise2(secondaryDomain), 31.0) * 0.42;
-  }
-
-  vec3 cool = vec3(0.58, 0.72, 1.0);
-  vec3 warm = vec3(1.0, 0.78, 0.57);
-  vec3 tint = mix(
-    cool,
-    warm,
-    noise2(rotate2d(0.29) * uv * 7.1 + seed * 0.73)
-  );
-
-  return tint * speckles * 0.56;
-}
-
 vec3 universe(
   vec2 uv,
   float seed,
@@ -130,7 +99,6 @@ vec3 universe(
   vec3 darkBase = vec3(0.0015, 0.003, 0.009);
   vec3 color = mix(lightBase, darkBase, dark);
   color += nebulaTint * nebula * mix(0.42, 0.64, dark);
-  color += staticSpeckles(rotated, seed + 2.0, quality);
 
   return color;
 }
@@ -249,7 +217,7 @@ void main() {
   color *= 1.0 - vignette * 0.48;
 
   float grain = hash21(gl_FragCoord.xy) - 0.5;
-  color += grain * 0.009 * mix(0.55, 1.0, uDark);
+  color += grain * 0.004 * mix(0.55, 1.0, uDark);
 
   color = max(color, vec3(0.0));
   color = 1.0 - exp(-color * 1.18);
