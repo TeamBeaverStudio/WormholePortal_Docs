@@ -82,24 +82,23 @@ The default metric is:
 
 | Property | Default | Controls |
 | --- | ---: | --- |
-| **Portal Radius** | `50 cm` | The radius of the portal opening |
+| **Portal Radius** | `50 cm` | Radius of the central seam used for physical traversal |
 | **Throat Half Length** | `100 cm` | Half of the connected throat length |
 | **Transition Length** | `200 cm` | The blend distance into and out of the throat |
 
 ## 3. Bake the visual data
 
-For a deterministic quickstart result, bake the DNEG lookup data before
-testing.
+For a deterministic quickstart result, bake the lookup data before testing.
 
 1. Open the main **Tools** menu.
-2. Under **Wormhole Portal**, select **Bake All DNEG LUTs**.
-3. In **DNEG LUT Bake Settings**, set **Quality** to **Balanced**.
+2. Under **Wormhole Portal**, select **Bake All LUTs**.
+3. In **LUT Bake Settings**, set **Quality** to **Balanced**.
 4. Set **Domain** to **Current Level Auto**.
 5. Select **Bake**.
-6. Wait for the success notification beginning with `DNEG LUT ready:`.
+6. Wait for the success notification beginning with `LUT ready:`.
 
 <!-- CAPTURE SLOT GS-04: Balanced and Current Level Auto bake settings. -->
-<!-- CAPTURE SLOT GS-05: DNEG LUT ready success notification. -->
+<!-- CAPTURE SLOT GS-05: LUT ready success notification. -->
 
 !!! note
 
@@ -145,11 +144,11 @@ Start Play In Editor and approach the first portal with your character.
 | Symptom | What to check |
 | --- | --- |
 | The `WPPortalTrace` warning keeps returning | Select **Add Automatically**, confirm the config update completed, and restart the editor. |
-| The portal is not visible | Confirm **Linked Portal**, unit actor scale, a Perspective Game View using SM5+, and a completed DNEG LUT bake. |
+| The portal is not visible | Confirm **Linked Portal**, unit actor scale, a Perspective Game View using SM5+, and a completed LUT bake. |
 | The player does not pass through | Confirm `WPTransitComponent`, **Transit Type: Auto**, **Transit Enabled**, and the required Character components. |
-| Transit Manager reports `ActorTooLarge` | Increase **Portal Radius**. Do not increase the portal Actor Scale. |
+| Runtime log reports `Reason=ActorTooLarge` | Increase **Portal Radius**. Do not increase the portal Actor Scale. |
 | Transit Manager does not report `Ready` | Select the actor in Transit Manager and resolve the setup item it reports before testing again. |
-| The packaged build cannot find baked data | Add `/Game/WormholePortal/Generated/DNEG` to the project's cook directories. |
+| The packaged build cannot find baked data | Confirm `/Game/WormholePortal/Generated/LUT` is present in the project's cook directories. |
 
 ??? info "Collect additional diagnostics"
 
@@ -169,13 +168,15 @@ Continue with:
 - [Reference](../reference/) for settings and interfaces.
 - [Issues](../issues/) for known problems and workarounds.
 
-!!! warning "Cook generated DNEG data"
+!!! warning "Cook generated LUT data"
 
-    Before packaging, add `/Game/WormholePortal/Generated/DNEG` to
-    **Project Settings > Packaging > Additional Asset Directories to Cook**, or
-    add the following entry to `Config/DefaultGame.ini`:
+    The plugin synchronizes its configured **Generated LUT Asset Path** with
+    **Project Settings > Packaging > Additional Asset Directories to Cook**.
+    Before packaging, confirm that the default path
+    `/Game/WormholePortal/Generated/LUT`—or your custom path—is present. The
+    default config entry is:
 
     ```ini
     [/Script/UnrealEd.ProjectPackagingSettings]
-    +DirectoriesToAlwaysCook=(Path="/Game/WormholePortal/Generated/DNEG")
+    +DirectoriesToAlwaysCook=(Path="/Game/WormholePortal/Generated/LUT")
     ```

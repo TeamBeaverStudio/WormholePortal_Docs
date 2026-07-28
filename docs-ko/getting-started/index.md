@@ -83,25 +83,25 @@
 
 | 속성 | 기본값 | 역할 |
 | --- | ---: | --- |
-| **Portal Radius** | `50 cm` | 포털 입구의 반지름 |
+| **Portal Radius** | `50 cm` | 물리 통과 판정에 사용하는 중앙 Seam의 반지름 |
 | **Throat Half Length** | `100 cm` | 연결된 목 길이의 절반 |
 | **Transition Length** | `200 cm` | 목으로 들어가고 나오는 전이 구간의 블렌드 거리 |
 
 ## 3. 비주얼 데이터 베이크
 
-항상 동일한 빠른 시작 결과를 얻을 수 있도록 테스트 전에 DNEG 룩업
-데이터를 베이크합니다.
+항상 동일한 빠른 시작 결과를 얻을 수 있도록 테스트 전에 LUT 데이터를
+베이크합니다.
 
 1. 메인 **Tools** 메뉴를 엽니다.
-2. **Wormhole Portal** 아래에서 **Bake All DNEG LUTs**를 선택합니다.
-3. **DNEG LUT Bake Settings**에서 **Quality**를 **Balanced**로
+2. **Wormhole Portal** 아래에서 **Bake All LUTs**를 선택합니다.
+3. **LUT Bake Settings**에서 **Quality**를 **Balanced**로
    설정합니다.
 4. **Domain**을 **Current Level Auto**로 설정합니다.
 5. **Bake**를 선택합니다.
-6. `DNEG LUT ready:`로 시작하는 성공 알림이 표시될 때까지 기다립니다.
+6. `LUT ready:`로 시작하는 성공 알림이 표시될 때까지 기다립니다.
 
 <!-- CAPTURE SLOT GS-04: Balanced 및 Current Level Auto 베이크 설정. -->
-<!-- CAPTURE SLOT GS-05: DNEG LUT ready 성공 알림. -->
+<!-- CAPTURE SLOT GS-05: LUT ready 성공 알림. -->
 
 !!! note
 
@@ -149,11 +149,11 @@ Play In Editor를 시작하고 캐릭터로 첫 번째 포털에 접근합니다
 | 증상 | 확인할 항목 |
 | --- | --- |
 | `WPPortalTrace` 경고가 계속 표시됨 | **Add Automatically**를 선택하고 설정 파일 업데이트가 완료되었는지 확인한 뒤 에디터를 다시 시작합니다. |
-| 포털이 보이지 않음 | **Linked Portal**, 액터의 단위 스케일, SM5 이상을 사용하는 Perspective Game View, 완료된 DNEG LUT 베이크를 확인합니다. |
+| 포털이 보이지 않음 | **Linked Portal**, 액터의 단위 스케일, SM5 이상을 사용하는 Perspective Game View, 완료된 LUT 베이크를 확인합니다. |
 | 플레이어가 포털을 통과하지 못함 | `WPTransitComponent`, **Transit Type: Auto**, **Transit Enabled** 및 필수 Character 컴포넌트를 확인합니다. |
-| Transit Manager에 `ActorTooLarge`가 표시됨 | **Portal Radius**를 늘립니다. 포털 Actor Scale은 늘리지 마세요. |
+| Runtime Log에 `Reason=ActorTooLarge`가 표시됨 | **Portal Radius**를 늘립니다. 포털 Actor Scale은 늘리지 마세요. |
 | Transit Manager에 `Ready`가 표시되지 않음 | Transit Manager에서 액터를 선택하고 보고된 설정 문제를 해결한 뒤 다시 테스트합니다. |
-| 패키징된 빌드에서 베이크 데이터를 찾지 못함 | 프로젝트의 Cook 디렉터리에 `/Game/WormholePortal/Generated/DNEG`를 추가합니다. |
+| 패키징된 빌드에서 베이크 데이터를 찾지 못함 | 프로젝트의 Cook 디렉터리에 `/Game/WormholePortal/Generated/LUT`가 포함되어 있는지 확인합니다. |
 
 ??? info "추가 진단 정보 수집"
 
@@ -173,13 +173,15 @@ Play In Editor를 시작하고 캐릭터로 첫 번째 포털에 접근합니다
 - 설정과 인터페이스는 [레퍼런스](../reference/)를 참고하세요.
 - 알려진 문제와 해결 방법은 [문제 해결](../issues/)을 참고하세요.
 
-!!! warning "생성된 DNEG 데이터 Cook"
+!!! warning "생성된 LUT 데이터 Cook"
 
-    패키징하기 전에 `/Game/WormholePortal/Generated/DNEG`를
-    **Project Settings > Packaging > Additional Asset Directories to Cook**에
-    추가하거나 `Config/DefaultGame.ini`에 다음 항목을 추가하세요.
+    플러그인은 설정된 **Generated LUT Asset Path**를
+    **Project Settings > Packaging > Additional Asset Directories to Cook**와
+    동기화합니다. 패키징 전에 기본 경로
+    `/Game/WormholePortal/Generated/LUT` 또는 직접 지정한 경로가
+    포함되어 있는지 확인하세요. 기본 설정 항목은 다음과 같습니다.
 
     ```ini
     [/Script/UnrealEd.ProjectPackagingSettings]
-    +DirectoriesToAlwaysCook=(Path="/Game/WormholePortal/Generated/DNEG")
+    +DirectoriesToAlwaysCook=(Path="/Game/WormholePortal/Generated/LUT")
     ```
