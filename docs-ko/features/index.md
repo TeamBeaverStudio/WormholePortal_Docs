@@ -21,8 +21,6 @@ Wormhole Portal은 물리학에서 영감을 받은 구형 포털 렌더러와 �
 - **적응형 캡처:** 포털의 가시성과 화면 점유율에 따라 Cubemap 해상도가
   달라지며, Safe Proxy 내부에는 별도 해상도를 사용합니다.
 
-<!-- CAPTURE SLOT F-01: 입구, 목, 강한 렌즈 효과, 목적지 화면을 보여 주는 시네마틱 인게임 영상. -->
-
 **Project Settings > Plugins > Wormhole Portal > Scene Capture**의 품질
 옵션은 포털 Cubemap 캡처에만 적용됩니다. 플레이어의 일반 Game View에는
 영향을 주지 않습니다.
@@ -50,11 +48,28 @@ Radius는 그 결과에 **Transition Length**를 더한 값입니다.
     설정된 치수를 사용하며 Actor Scale을 크기 조절 값으로 취급하지
     않습니다.
 
+런타임에 크기를 바꿀 때는 목적을 구분하세요.
+
+- `Initialize Physical Metric`은 최종 `ρ`, `a`, `T`를 한 번에 설정합니다.
+  이후 다시 호출할 때는 처음 정한 `a/ρ`, `T/ρ` 비율을 유지해야 합니다.
+- `Set Uniform Physical Metric Scale`은 Collision, Bounds, Visibility Query,
+  Capture 해상도까지 실제 물리 Metric을 균일하게 바꾸므로 비용이 큽니다.
+- `Set Portal Visual Scale`은 렌더링 크기만 바꿉니다. 프레임마다 실행하는
+  생성·성장 효과에는 이 API를 권장합니다.
+
+`Set Metric Parameters`는 하위 호환용 Deprecated 이름입니다. 새
+Blueprint와 C++ 코드는 `Initialize Physical Metric`을 사용하세요.
+
 ## 액터 통과
 
 포털을 통과해야 하는 액터에 `WPTransitComponent`를 추가합니다.
 **Transit Type: Auto**는 액터와 움직일 수 있는 충돌 컴포넌트를 검사해
 호환되는 방식을 선택합니다.
+
+모든 참여 Actor에는 직접 소유한 Movable, Collision-enabled Primitive가
+필요합니다. Physics Transit은 Physics Collision과 Simulation이 켜진 지원
+단일 Body Primitive가 하나 이상 필요하며, 유효한 Mesh의 Instanced가 아닌
+Static Mesh 또는 지원 Shape Component를 사용합니다.
 
 지원하는 통과 유형은 다음과 같습니다.
 
@@ -69,19 +84,26 @@ Radius는 그 결과에 **Transition Length**를 더한 값입니다.
 상태는 복제됩니다. 전체 게임플레이 동작은 프로젝트의 네트워크 모델에서
 직접 테스트하세요.
 
-<!-- CAPTURE SLOT F-02: 같은 포털 쌍을 Character와 물리 오브젝트가 통과하는 짧은 게임플레이 영상. -->
-
 표현과 충돌을 위한 두 가지 선택 기능도 있습니다.
 
 - **Material Clip**은 연속된 네 개의 Custom Primitive Data 슬롯에 Sphere
   Clip의 중심, Normal, 반지름을 기록해, 호환 머티리얼이 경계 너머 부분을
   숨길 수 있게 합니다.
 - **Voxel Collision**은 오브젝트가 두 공간에 걸쳐 있는 동안 참여하는
-  Static Mesh의 충돌을 베이크한 박스 복셀 바디로 교체합니다.
+  Primitive의 충돌을 베이크한 Box Voxel Body로 교체합니다.
 
-Voxel Collision은 사용할 수 있는 Simple Collision이 있는 Static Mesh를
-대상으로 합니다. Transit Component에서 기능을 켠 뒤 해당 컴포넌트의
-Details 패널에서 **Bake Voxel Body**를 실행하세요.
+Voxel Collision은 Instanced가 아닌 Static Mesh의 Sphere, Box, Capsule,
+Convex Simple Collision과 `BoxComponent`, `SphereComponent`,
+`CapsuleComponent`를 지원합니다. Transit Component에서 기능을 켠 뒤
+Details 패널에서 **Bake Voxel Body**를 실행하세요. **Max Voxel Count**는
+Actor 전체가 아니라 각 참여 Primitive별 상한입니다.
+
+Material Clip을 사용하려면 머티리얼에
+`/WormholePortal/Materials/MaterialFunctions/MF_WPTransitClip`을 연결하고,
+Transit Component에서 **Use Material Clip**을 켭니다. Project Settings의
+**Clip Base Index**와 머티리얼의 Index를 일치시키고, 기본값 `28`부터
+연속된 Custom Primitive Data 네 칸(`28–31`)이 다른 용도와 충돌하지 않는지
+확인한 뒤 Compile 및 Save하세요.
 
 ## 포털 인식 트레이스
 
@@ -100,8 +122,6 @@ Blueprint와 C++ API는 다음을 제공합니다.
 시작 알림에서 채널을 자동으로 추가하고 설정을 맞출 수 있으며, 변경 후
 에디터를 다시 시작해야 합니다.
 
-<!-- CAPTURE SLOT F-03: 하나의 Line Trace가 포털에 들어가 연결된 출구에서 이어지는 Blueprint 또는 디버그 화면. -->
-
 ## 포털을 통한 공간 오디오
 
 오디오 서브시스템은 공간화된 Audio Component를 찾아 연결된 포털
@@ -117,8 +137,6 @@ Blueprint와 C++ API는 다음을 제공합니다.
 Component 또는 소유 액터에 `WP.PortalAudio.Disabled` 태그를 추가하면
 대상에서 제외할 수 있습니다.
 
-<!-- CAPTURE SLOT F-04: 공간화 음원이 포털을 통해 들리고 Occlusion이 적용되는 전후를 소리와 함께 보여 주는 영상. -->
-
 ## Point 및 Spot Light 전달
 
 입구 포털에 영향을 주는 Point Light와 Spot Light는 연결된 출구에
@@ -126,12 +144,10 @@ Component 또는 소유 액터에 `WP.PortalAudio.Disabled` 태그를 추가하�
 속성을 따라가고, 조명 범위를 포털 입구로 제한하며, 그림자를 위해 원본
 공간의 가시성도 전달할 수 있습니다.
 
-<!-- CAPTURE SLOT F-05: 움직이는 Point 또는 Spot Light가 연결된 출구 너머의 지오메트리를 비추는 짧은 영상. -->
-
 현재 조명 모델은 Directional Light, Global Illumination, 반사, 볼류메트릭,
 반투명 그림자, 색이 있는 그림자, 포털 내부에 있는 조명, 반지름이 서로
 다른 포털 쌍을 전달하지 않습니다. 조명에 의존하는 장면을 만들기 전에
-[문제 해결](../issues/#portal-lighting)을 확인하세요.
+[문제 해결](../issues/index.md#portal-lighting)을 확인하세요.
 
 ## World Partition 목적지 스트리밍
 
@@ -156,19 +172,21 @@ World Partition 레벨에서는 플레이어가 입구에 도달하기 전에 �
 | **Transit Manager** | 액터를 검사하고 설정 문제를 표시하며 호환되는 액터에 Transit을 추가 |
 | **Bake All LUTs** | 현재 레벨의 포털에 사용할 공용 렌더링 룩업 데이터 생성 |
 
-<!-- CAPTURE SLOT F-06: Ready, Needs Setup, Not Supported 행이 함께 보이는 Transit Manager. -->
-
 포털 액터는 에디터에서 Metric 경계를 그릴 수 있고,
 `WPTransitComponent`에는 런타임 통과 디버그가 있습니다. 더 넓은 범위의
 진단에는 다음을 사용하세요.
 
 - **Output Log**를 `LogWormhole`로 필터링합니다.
+- Non-Shipping 빌드에서 Transit 거부를 재현하기 전에
+  `Log LogWormhole Verbose`를 실행합니다.
 - `stat WormholePortal`로 플러그인 카운터와 CPU 시간을 확인합니다.
 - 실제 GPU 실행 비용은 Unreal의 `stat gpu` 또는 GPU Profiler로
   확인합니다.
 
 ## 다음 문서
 
-- [시작하기](../getting-started/)에서 실제 포털 쌍을 만드세요.
-- 속성, Enum, 함수, 기본값은 [레퍼런스](../reference/)를 참고하세요.
-- 알려진 제한과 해결 방법은 [문제 해결](../issues/)을 참고하세요.
+- [시작하기](../getting-started/index.md)에서 실제 포털 쌍을 만드세요.
+- [데모](../demo/index.md)에서 모든 예제를 직접 실행하세요.
+- 속성, Enum, 함수, 기본값은 [레퍼런스](../reference.md)를 참고하세요.
+- 알려진 제한과 해결 방법은 [문제 해결](../issues/index.md)을 참고하세요.
+- 공식 호환성과 문의 방법은 [호환성 및 지원](../support/index.md)을 참고하세요.

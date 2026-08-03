@@ -12,7 +12,10 @@
   height: clamp(38rem, calc(100svh - 2.4rem), 58rem);
   min-height: 38rem;
   color: var(--wp-hero-text);
-  background: #02040a url("../assets/wormhole-sky-v1.webp") center / cover no-repeat;
+  background:
+    radial-gradient(circle at 72% 43%, rgb(89 151 232 / 46%) 0 2%, transparent 16%),
+    radial-gradient(circle at 72% 43%, transparent 0 10%, rgb(64 102 180 / 24%) 22%, transparent 43%),
+    conic-gradient(from 205deg at 72% 43%, #02040a, #142746 24%, #050914 45%, #274568 61%, #02040a 82%);
 }
 
 .wp-hero__veil {

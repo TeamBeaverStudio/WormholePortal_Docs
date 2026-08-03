@@ -21,8 +21,6 @@
     스케일링하지 말고 **Portal Radius**, **Throat Half Length**,
     **Transition Length**로 크기를 조절하세요.
 
-<!-- CAPTURE SLOT R-01: Linked Portal, 단위 Transform Scale, 세 Metric 값, Active LUT Domain이 보이는 Portal Actor Details 패널. -->
-
 ### 주요 속성
 
 | 속성 | 코드 기본값 | 제약 및 역할 |
@@ -36,6 +34,8 @@
 | **Streaming Release Distance** | `20,000 cm` | 로딩을 유지하는 바깥 거리입니다. Preload Distance 이상으로 제한됩니다. |
 | **Streaming Query Interval** | `0.2 s` | 근접 수요를 다시 검사하는 간격입니다. 최소 `0.01 s`입니다. |
 | **Draw Portal Debug** | Editor에서 켜짐 | Seam, Mouth, Transition 경계를 표시합니다. PIE 시작 시 강제로 꺼집니다. |
+| **Uniform Physical Metric Scale** | `1.0` | 초기화된 Metric 전체를 균일하게 확대합니다. Collision, Bounds, Visibility와 Capture 정책도 바뀝니다. |
+| **Portal Visual Scale** | `1.0` | Compositor가 표시하는 크기만 바꿉니다. 물리 Metric과 Collision은 바뀌지 않습니다. |
 
 Metric 경계는 다음과 같습니다.
 
@@ -53,21 +53,30 @@ LUT 비율          = Transition Length / Portal Radius
 | `Clear Linked Portal` | Callable | 양방향 연결을 해제합니다. |
 | `Get Linked Portal` / `Has Linked Portal` | Pure | 연결 상태를 읽습니다. |
 | `Is Linked Portal Area Ready` | Pure | 일반 레벨에서는 항상 `true`이며, World Partition에서는 목적지 스트리밍 준비 상태를 반환합니다. |
-| `Set Portal Radius` | Callable | `ρ`를 설정하고 `T > 0`이면 LUT Domain 제약을 적용한 뒤 연결된 포털에 전달합니다. |
-| `Set Throat Half Length` | Callable | `a`를 설정하고 전달합니다. |
-| `Set Transition Length` | Callable | `T`를 설정하고 LUT Domain 제약을 적용한 뒤 전달합니다. |
-| `Set Metric Parameters` | Callable | 세 값을 한 번에 검증하고 적용합니다. 런타임에서 여러 값을 바꿀 때 권장합니다. |
+| `Set Portal Radius` | Callable | 제작 단계에서 `ρ`를 설정합니다. BeginPlay 이후의 독립 변경은 거부됩니다. |
+| `Set Throat Half Length` | Callable | 제작 단계에서 `a`를 설정합니다. BeginPlay 이후의 독립 변경은 거부됩니다. |
+| `Set Transition Length` | Callable | 제작 단계에서 `T`를 설정합니다. BeginPlay 이후의 독립 변경은 거부됩니다. |
+| `Initialize Physical Metric` | Callable | 최종 `ρ`, `a`, `T`를 한 번에 초기화합니다. 런타임 후속 호출은 처음의 `a/ρ`, `T/ρ` 비율을 유지하는 균일 변경만 허용합니다. |
+| `Set Metric Parameters` | Callable, Deprecated | `Initialize Physical Metric`의 하위 호환 이름입니다. 새 코드에서 사용하지 마세요. |
+| `Set Uniform Physical Metric Scale` / `Get Uniform Physical Metric Scale` | Callable / Pure | 초기화한 Metric을 균일하게 물리 확대하고 현재 배수를 읽습니다. |
+| `Set Portal Visual Scale` / `Get Portal Visual Scale` | Callable / Pure | 렌더링 크기만 바꾸고 읽습니다. 프레임 단위 성장 효과에 권장합니다. |
 | Metric Getter | Pure | `Get Portal Radius`, `Get Mouth Radius`, `Get Throat Half Length`, `Get Transition Length`, `Get Transition Radius` |
 | `Get Portal Cube Render Target` | Pure | 런타임이 소유한 참조를 반환합니다. 크기 변경, 초기화, 업데이트 또는 해제를 호출하지 마세요. |
 | `Get LUT Texture` / `Get LUT Z` | Pure | 활성 Volume LUT와 현재 포털의 논리적 Slice를 반환합니다. |
 | `Transform Ray Through Portal` | Callable | 진입 표면점과 안쪽 방향을 연결된 포털 공간으로 변환합니다. Trace는 수행하지 않습니다. 기본 Exit Offset은 `2 cm`입니다. |
 | `Set Draw Portal Debug` / `Is Portal Debug Enabled` | Callable / Pure | Editor 경계 표시를 제어합니다. |
 
+!!! important "런타임 크기 변경 계약"
+
+    `Initialize Physical Metric`으로 최종 형태를 먼저 확정하세요. 물리적으로
+    커져야 할 때만 `Set Uniform Physical Metric Scale`을 사용하고, 생성
+    애니메이션처럼 시각적인 변화는 `Set Portal Visual Scale`을 사용합니다.
+    Actor Transform Scale은 이 계산에 반영되지 않으므로 `(1, 1, 1)`로
+    유지해야 표시와 Collision의 불일치를 피할 수 있습니다.
+
 ## Transit Component { #transit-component }
 
 Actor가 포털을 통과하게 하려면 `UWPTransitComponent`를 추가합니다.
-
-<!-- CAPTURE SLOT R-02: Transit, Advanced, Voxel 그룹을 펼친 WPTransitComponent Details 패널. -->
 
 ### 속성
 
@@ -80,12 +89,36 @@ Actor가 포털을 통과하게 하려면 `UWPTransitComponent`를 추가합니�
 | **Use Voxel Collision** | 꺼짐 | Master와 Twin이 공존하는 동안 베이크된 복셀 충돌을 사용합니다. |
 | **Use Material Clip** | 꺼짐 | Custom Primitive Data를 통해 호환 머티리얼을 제어합니다. |
 | **Voxel Size** | `20 cm` | Editor Bake에서 요청할 복셀 한 변의 길이입니다. |
-| **Max Voxel Count** | `256` | Static Mesh당 최대 Box 수입니다. 범위는 `1–512`입니다. |
+| **Max Voxel Count** | `256` | 각 Bake 대상 Primitive당 최대 Box 수입니다. 범위는 `1–512`입니다. |
 | **Center Mode** | `Root Component Location` | 진입 접평면의 기준입니다. 선택값: `Root Component Location`, `Actor OBB Center`. |
 
 `Auto`의 판별 순서는 `Character`, `Projectile`, `Pawn`, `Physics`입니다.
 구체적인 타입을 선택하면 그 타입만 검증하며 다른 Handler로 대체되지
 않습니다.
+
+모든 타입은 Actor가 직접 소유하는 Movable Collision Primitive가 필요합니다.
+Transit 후보 중 하나 이상은 Query Collision과 **Generate Overlap Events**가
+켜져 있고 포털 Trigger와 Overlap할 수 있어야 합니다. Instanced Static Mesh
+Component는 지원하지 않습니다.
+
+| 타입 | 필수 구성 |
+| --- | --- |
+| **Character** | `ACharacter`, Root Capsule, 해당 Capsule을 Updated Component로 사용하는 Character Movement. 선택적 시각 Skeletal Mesh가 있으면 Physics Simulation이 꺼져 있어야 함 |
+| **Projectile** | 유효한 `UProjectileMovementComponent`와 Actor 소유의 Updated Primitive. 해당 Primitive는 Physics Simulation을 사용하지 않음 |
+| **Pawn** | Character가 아닌 `APawn`, Pawn Movement, Root이자 Updated Component인 Actor 소유 Primitive. 해당 Primitive는 Physics Simulation을 사용하지 않음 |
+| **Physics** | Physics Collision 및 Simulation이 켜진 지원 단일 Body Primitive 하나 이상. 유효한 Mesh의 Static Mesh 또는 Shape Component를 지원하며 Instanced Static Mesh는 제외 |
+
+**Use Voxel Collision**은 Instanced가 아닌 Static Mesh와 Box/Sphere/Capsule
+Shape Component에 사용할 수 있습니다. Static Mesh의 Bake Source는 Sphere,
+Box, Capsule 또는 Convex Simple Collision입니다. 생성 기본 경로는
+`/Game/WormholePortal/Generated/Voxels`이며 **Max Voxel Count**는 각 참여
+Primitive별 제한입니다.
+
+**Use Material Clip**을 사용할 때는
+`/WormholePortal/Materials/MaterialFunctions/MF_WPTransitClip`을 Material에
+연결합니다. 기본 **Clip Base Index** `28`부터 연속된 네 Custom Primitive
+Data 슬롯이 비어 있고 Material 쪽 Index와 Project Settings가 같은지
+확인하세요.
 
 ### Delegate
 
@@ -121,14 +154,26 @@ Actor가 포털을 통과하게 하려면 `UWPTransitComponent`를 추가합니�
 | `EWPTransitPhase` | `Idle`, `Check`, `Crossing`, `Cooldown` |
 | `EWPTransitRole` | `None`, `Master`, `Twin` |
 | `EWPTransitResult` | `None`, `Rejected`, `Committed`, `Cancelled` |
-| `EWPTransitFailReason` | `None`, `NotReady`, `PortalUnavailable`, `AlreadyInTransit`, `CooldownActive`, `ActorTooLarge`, `TwinCreationFailed`, `PortalDestroyed`, `InternalError`, `UnsupportedActor`, `InvalidSetup`, `TransitDisabled`, `MissingPrimitives`, `MissingPhysicsMesh`, `MissingVoxelData` |
+| `EWPTransitFailReason` | `None`, `NotReady`, `PortalUnavailable`, `AlreadyInTransit`, `CooldownActive`, `DoesNotFitGate`, `TwinCreationFailed`, `PortalDestroyed`, `InternalError`, `UnsupportedActor`, `InvalidSetup`, `TransitDisabled`, `MissingPrimitives`, `MissingPhysicsMesh`, `MissingVoxelData`, `InvalidVelocity`, `InvalidCenter`, `InvalidPlane`, `BeginFailed`, `VoxelBeginFailed`, `UpdateFailed`, `RuntimeStateLost`, `MappingInvalid`, `InvalidRunState`, `ReturnedToSource`, `CommitFailed`, `CancelRequested`, `SubsystemClosed` |
+
+설정 검사기와 Transit Manager가 사용하는 `EWPTransitResolveFailReason` 값은
+다음과 같습니다.
+
+```text
+None, UnsupportedActor, TransitDisabled, MissingPrimitives, NoPhysicsBody,
+MissingVoxelData, TypeMismatch, MissingMovement, InvalidMoveOwner,
+InvalidUpdatedPart, InvalidRootPart, InvalidPartOwner, PartNotMovable,
+PartNoCollision, UnsupportedPart, ExcludedPart, SimPhysics, InvalidMoveType,
+NoOverlapPart
+```
+
+`DoesNotFitGate`는 이동 방향에 수직인 Actor의 투영 통과 단면이 Source
+Portal Gate/Core Radius 안에 들어가지 않는다는 뜻입니다.
 
 ## 포털 인식 Line Trace { #portal-aware-line-traces }
 
 일반 Scene Trace Channel로 `WPPortalTrace`를 전달하지 마세요. 이 채널은
 라이브러리가 포털을 찾을 때 내부적으로 사용합니다.
-
-<!-- CAPTURE SLOT R-03: Portal Line Trace Detailed By Channel과 Break WPPortalTraceResult를 연결한 Blueprint 그래프. -->
 
 | Blueprint 노드 | 결과 |
 | --- | --- |
@@ -144,6 +189,15 @@ Offset = 2 cm`, `Draw Time = 5 s`, 빨간 Trace, 초록 Hit입니다.
 시작점 기준 거리는 `FWPPortalTraceHit.LogicalDistance`를 사용하세요.
 논리적 거리에는 포털 내부 거리와 **Portal Exit Offset**이 포함되지
 않습니다.
+
+### Blueprint 예제
+
+카메라 위치를 **Start**, 카메라 Forward Vector에 원하는 거리를 곱해 더한
+값을 **End**로 만들고 `Portal Line Trace Detailed By Channel`에 연결합니다.
+일반 월드 충돌 채널(예: `Visibility`)을 사용하고, 반환된
+`FWPPortalTraceResult.Status`가 `Completed`인지 확인한 뒤 `Scene Hits`와
+`Portal Events`를 처리하세요. `WPPortalTrace`는 내부 포털 감지 채널이므로
+노드의 Trace Channel로 선택하지 마세요.
 
 !!! warning "Portal Exit Offset 동작"
 
@@ -169,8 +223,6 @@ C++에는 `PortalLineTraceTestByChannel`, `PortalLineTraceSingleByChannel`,
 **Edit > Project Settings > Plugins > Wormhole Portal**에서 설정합니다. 값은
 `DefaultEngine.ini`에 저장됩니다.
 
-<!-- CAPTURE SLOT R-04: 주요 설정 그룹이 보이는 Project Settings > Plugins > Wormhole Portal 화면. -->
-
 ### Trace 및 Transit
 
 | 설정 | 플러그인 기본값 |
@@ -185,18 +237,32 @@ C++에는 `PortalLineTraceTestByChannel`, `PortalLineTraceSingleByChannel`,
 **Clip Base Index**부터 연속된 네 개의 Custom Primitive Data 값을
 사용하며, `MF_WPTransitClip`을 사용하는 머티리얼과 같은 값이어야 합니다.
 
+**Generated Voxel Asset Path**는 대소문자를 구분하는 `/Game/` Prefix를 가진
+유효하고 쓰기 가능한 Unreal Long Package Directory여야 합니다. 역슬래시와
+끝의 Slash는 검증 전에 정규화됩니다. 설치된 Plugin Content 경로인
+`/WormholePortal/...`은 생성 Asset을 쓸 수 없으므로 거부됩니다.
+
 ### 동적 Cubemap 해상도
 
 | 설정 | 플러그인 기본값 |
 | --- | ---: |
-| **Hidden / Minimum Resolution** | `64` |
-| **Tier 1 Start / Resolution** | `8%` / `256` |
-| **Tier 2 Start / Resolution** | `32%` / `512` |
-| **Tier 3 Start / Resolution** | `60%` / `768` |
+| **Lowest Visible Resolution** | `64` |
+| **초기 Tier 1 Start / Resolution** | `30%` / `128` |
+| **초기 Tier 2 Start / Resolution** | `60%` / `256` |
+| **초기 Tier 3 Start / Resolution** | `100%` / `512` |
 | **Inside SafeProxy Resolution** | `768` |
 
-해상도는 런타임에서 `64–2048` 사이의 64 배수로 정규화되며, VRAM Budget에
-따라 낮아질 수 있습니다.
+**Resolution Tiers**는 Project Settings에서 요소를 추가·삭제·재정렬할 수
+있는 배열입니다. 런타임은 Start 값을 `0–100%`로 제한하고 임시 정책을
+오름차순으로 정렬합니다. 양수 해상도는 다음 8 배수로 올림한 뒤
+`8–2048` 범위로 제한합니다. 각 Tier는 **Lowest Visible Resolution**부터
+내림차순이 되지 않도록 보정되며, **Inside SafeProxy Resolution**도 Lowest
+값 이상으로 보정됩니다. 배열이 비어 있으면 Safe Proxy 바깥의 모든
+거리에서 Lowest 값을 사용합니다. 위 Tier 값은 새 설정을 초기화할 때의
+코드 기본값이며 프로젝트 Config가 이를 덮어쓸 수 있습니다.
+
+Cubemap Memory 통계는 진단용이며 실제 해상도 정책은 위 Project Settings에서
+결정됩니다.
 
 ### Scene Capture Show Flag
 
@@ -254,6 +320,10 @@ C++에는 `PortalLineTraceTestByChannel`, `PortalLineTraceSingleByChannel`,
 | **Tail Flatten Start** | `0.5` |
 | **Allow Runtime LUT Fallback** | 켜짐 |
 
+**Generated LUT Asset Path**에도 같은 `/Game/` Long Package Directory 규칙이
+적용됩니다. 기본 LUT 및 Voxel 경로는 프로젝트 Content에 생성되며, 설치된
+Plugin Content 경로로 변경할 수 없습니다.
+
 ## Tag
 
 | Actor 또는 Component Tag | 효과 |
@@ -272,7 +342,7 @@ C++에는 `PortalLineTraceTestByChannel`, `PortalLineTraceSingleByChannel`,
 | --- | --- |
 | **Tools > Wormhole Portal > Transit Manager** | Actor 호환성을 검사하고 `Ready`, `Needs Setup`, `Not Supported`를 표시하며 준비된 Actor에 Transit을 적용합니다. |
 | **Tools > Wormhole Portal > Bake All LUTs** | **LUT Bake Settings**를 열고 공용 Volume LUT와 Catalog를 생성합니다. |
-| Transit Component Details | **Use Voxel Collision**이 켜져 있을 때 **Bake Voxel Body**로 Static Mesh Simple Collision을 복셀 에셋으로 만듭니다. |
+| Transit Component Details | **Use Voxel Collision**이 켜져 있을 때 **Bake Voxel Body**로 지원 Static Mesh Simple Collision 또는 Box/Sphere/Capsule Shape Component를 복셀 에셋으로 만듭니다. |
 | Portal Actor Details | 활성 LUT Domain을 표시하고 Metric 입력 범위를 해당 Domain에 맞게 제한합니다. |
 | 시작 알림 | `WPPortalTrace`가 없거나 불일치할 때 **Add Automatically** 및 **Open Collision Settings**를 제공합니다. |
 
@@ -286,10 +356,99 @@ LUT의 Quality 및 Domain Preset은 다음과 같습니다.
 Quality 숫자는 차례로 Impact Samples, Transition Samples, Ratio Samples,
 Integration Steps입니다.
 
-## Native 연동
+## 연동 예제 { #integration-examples }
 
-사용자 C++ 모듈에서는 `WormholePortalRuntime`을 모듈 의존성에
-추가합니다.
+### Blueprint 패턴
+
+런타임에 포털 쌍을 만들 때는 다음 순서를 사용합니다.
+
+1. **Set Linked Portal**을 호출합니다.
+2. 전체 `ρ`, `a`, `T`를 **Initialize Physical Metric**으로 한 번에
+   초기화합니다.
+3. Timeline에서 **Set Portal Visual Scale**을 구동해 값싼 열림 효과를
+   만듭니다.
+4. Collision과 실제 통과 Gate도 함께 커져야 할 때만 **Set Uniform
+   Physical Metric Scale**을 사용합니다.
+
+Transit은 Components 패널에서 `WPTransitComponent`를 추가하고 **Transit
+Type: Auto**, **Transit Enabled**로 Compile한 뒤 Transit Manager에서
+검사합니다. Trace는 **Portal Line Trace Detailed By Channel**을 **Break
+WPPortalTraceResult**에 연결하고 `Status`, `Scene Hits`, `Portal Events`와
+논리적 거리를 처리합니다.
+
+### C++ 모듈 의존성
+
+사용자 모듈의 `.Build.cs`에 Runtime 모듈을 추가합니다.
+
+```csharp
+PublicDependencyModuleNames.AddRange(
+    new string[]
+    {
+        "WormholePortalRuntime"
+    });
+```
+
+### 포털 쌍 설정과 애니메이션
+
+```cpp
+#include "WormholePortalActor.h"
+
+void ConfigurePortalPair(
+    AWormholePortalActor* PortalA,
+    AWormholePortalActor* PortalB)
+{
+    if (!IsValid(PortalA) || !IsValid(PortalB))
+    {
+        return;
+    }
+
+    PortalA->SetLinkedPortal(PortalB);
+    PortalA->InitializePhysicalMetric(75.0f, 150.0f, 300.0f);
+
+    // 프레임 단위 열림 효과에는 렌더링 크기만 바꿉니다.
+    PortalA->SetPortalVisualScale(0.5f);
+
+    // 실제 Gate와 Collision도 커져야 할 때 대신 사용합니다.
+    // PortalA->SetUniformPhysicalMetricScale(1.25f);
+}
+```
+
+복제되는 게임플레이 변경은 Authority에서 실행하세요. 세 개의 독립 Metric
+Setter를 Tick마다 호출하지 마세요.
+
+### 기존 Transit Component 새로고침
+
+```cpp
+#include "Transit/WPTransitComponent.h"
+
+if (UWPTransitComponent* Transit =
+        Actor->FindComponentByClass<UWPTransitComponent>())
+{
+    Transit->SetTransitType(EWPTransitType::Auto);
+    Transit->SetTransitEnabled(true);
+    Transit->RefreshFromOwner(); // Idle 상태에서만 성공합니다.
+}
+```
+
+### 포털 인식 Trace 실행
+
+```cpp
+#include "Trace/WPTraceLibrary.h"
+
+FWPPortalTraceResult Result;
+const bool bBlockingHit = UWPTraceLibrary::PortalLineTraceSingleByChannel(
+    WorldContextObject,
+    Result,
+    Start,
+    End,
+    ECC_Visibility);
+```
+
+`ECC_Visibility`는 이 예제의 일반 Scene Collision Channel입니다.
+`WPPortalTrace`로 바꾸지 마세요. `bBlockingHit`은 최종 Scene Blocking Hit의
+존재 여부이며 종료 이유와 전체 경로는 `Result`에서 확인합니다.
+
+## Native 서브시스템
 
 | 타입 | 범위와 용도 |
 | --- | --- |
@@ -333,15 +492,17 @@ Log LogWormhole Verbose
 | `wp.SceneViewExtensionEnabled` | `1` | Warmup 및 Production Composite의 상위 스위치 |
 | `wp.SimulateViewEnabled` | `1` | SIE Viewport Production Pass 활성화 |
 | `wp.CaptureSchedulerMode` | `2` | `1`: Atomic Pair, `2`: Staggered Endpoint. `0`은 `1`의 Deprecated Alias |
-| `wp.CaptureTargetEndpointHz` | `30` | 보이는 Endpoint 갱신 주기. 런타임 범위 `5–120 Hz` |
+| `wp.CaptureTargetEndpointHz` | `30` | 보이는 Endpoint 갱신 주기. 실제 런타임 Clamp 범위 `5–120 Hz` |
 | `wp.CaptureVisibilityInvisibleHoldSeconds` | `0.5` | 양쪽이 보이지 않은 뒤 Capture를 멈추기까지의 시간 |
+| `wp.CaptureVisibilityFeedbackMaxAgeSeconds` | `0.25` | GPU Visibility 피드백을 최신으로 인정하는 최대 시간 |
 | `wp.CaptureOcclusionTraceIntervalSeconds` | `0.1` | CPU SafeProxy Occlusion 검사 주기 |
-| `wp.CaptureVRAMBudgetMiB` | `160` | 지속 Cubemap Color Memory Budget. 최소 `16 MiB` |
 | `wp.CaptureResolutionUpgradeHoldSeconds` | `0.75` | 해상도를 높이기 전 대기 시간 |
 | `wp.CaptureResolutionDowngradeHoldSeconds` | `0.15` | 해상도를 낮추기 전 대기 시간 |
 | `wp.CaptureResolutionMinimumDwellSeconds` | `0.5` | 완료된 해상도 전환 사이의 최소 간격 |
 | `wp.CaptureMaxViewDistanceCm` | `-1` | 양수이면 Capture 거리 제한, `<=0`이면 제한 없음 |
 | `wp.CaptureLODDistanceFactor` | `1` | Capture LOD 배수. 범위 `1–10` |
+| `wp.CaptureFiniteFarPlane` | `0` | `1`이면 `CaptureMaxViewDistanceCm`을 Projection Far Plane에도 적용하는 진단 옵션 |
+| `wp.CubeAADirectPublish` | `1` | 지원되는 Direct Publish Cubemap 경로 활성화 |
 | `wp.CubeLumenParityMode` | `0` | `0`: Lumen 없음, `1`: GI, `2`: GI 및 Reflection |
 | `wp.ViewSummaryInterval` | `5` | 렌더링 집계 로그 주기(초) |
 

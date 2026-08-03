@@ -12,9 +12,11 @@ nav = [
   { "홈" = "index.md" },
   { "시작하기" = "getting-started/index.md" },
   { "기능" = "features/index.md" },
+  { "데모" = "demo/index.md" },
   { "레퍼런스" = "reference.md" },
   { "문제 해결" = "issues/index.md" },
   { "자주 묻는 질문" = "faq/index.md" },
+  { "호환성 및 지원" = "support/index.md" },
 ]
 extra_css = [
   "/WormholePortal_Docs/stylesheets/header.css",

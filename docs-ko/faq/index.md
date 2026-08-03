@@ -2,8 +2,10 @@
 
 ## 어떤 Unreal Engine 버전을 기준으로 하나요?
 
-현재 플러그인과 문서는 Unreal Engine 5.8을 기준으로 합니다. 다른 Engine
-버전은 실제 프로젝트에 사용하기 전에 해당 버전에서 검증하세요.
+버전 1.0의 공식 테스트·지원 환경은 Unreal Engine 5.8, Win64, DX12,
+SM6입니다. Linux, macOS, DX11, 모바일, 콘솔 및 Dedicated Server는 현재
+지원 대상으로 선언하지 않습니다. 다른 환경은 실제 프로젝트에 사용하기
+전에 직접 검증하세요.
 
 ## 모든 포털에 Linked Portal이 필요한가요?
 
@@ -20,8 +22,21 @@
 - **Throat Half Length**
 - **Transition Length**
 
-Actor Scale을 변경하면 표시 Mesh와 Collision이 Portal Metric과 달라질 수
-있으며, Renderer는 지원하지 않는 Scale을 거부합니다.
+Actor는 다른 Scale 값을 입력받을 수 있지만 Metric 반지름 계산에는 그
+Scale을 적용하지 않습니다. 따라서 표시 Mesh, Collision과 Portal Math가
+달라질 수 있으므로 제작 계약상 단위 Scale을 유지해야 합니다.
+
+## 런타임에 포털이 커지는 효과는 어떻게 만드나요?
+
+최종 크기를 `Initialize Physical Metric`으로 한 번 설정한 뒤
+`Set Portal Visual Scale`을 `0`에 가까운 값에서 `1`까지 애니메이션하세요.
+이 방식은 Collision, Bounds, LUT 및 Capture 정책을 바꾸지 않습니다.
+
+실제 통과 반지름까지 커져야 한다면 `Set Uniform Physical Metric Scale`을
+사용할 수 있지만 더 비쌉니다. `Set Portal Radius`, `Set Throat Half Length`,
+`Set Transition Length`의 독립적인 런타임 변경은 BeginPlay 이후
+거부됩니다. `Set Metric Parameters`는 Deprecated이므로 새 코드에서는
+`Initialize Physical Metric`을 사용하세요.
 
 ## LUT를 반드시 Bake해야 하나요?
 
@@ -42,6 +57,13 @@ Screen 및 다른 Multi-view는 제외됩니다. Movie Render Queue는 Main
 Deferred Mono Beauty 출력을 지원하며, Custom Pass, Virtual Texture Pass,
 Stereo 및 Multi-view 출력에는 포털이 합성되지 않습니다.
 
+## Dedicated Server에서 포털이 렌더링되나요?
+
+아닙니다. `WormholePortalRenderer` 모듈은 Server Target에서 제외되며 버전
+1.0은 Dedicated Server를 공식 지원 대상으로 선언하지 않습니다. 네트워크
+게임에서는 프로젝트의 Replication, Ownership, Relevancy와 Transit 동작을
+사용할 실제 Client/Server 구성에서 검증하세요.
+
 ## 어떤 Actor가 Transit을 사용할 수 있나요?
 
 Actor에 `WPTransitComponent`를 추가해 Transit을 활성화합니다. 지원하는
@@ -58,12 +80,29 @@ Actor에 `WPTransitComponent`를 추가해 Transit을 활성화합니다. 지원
 구성해야 합니다. PIE를 실행하기 전에 **Transit Manager**로 설정 문제를
 확인하세요.
 
-## ActorTooLarge는 무엇을 의미하나요?
+모든 타입은 Actor가 직접 소유하는 Movable Collision Primitive가 필요하고,
+그중 하나 이상이 포털 Trigger와 Overlap할 수 있어야 합니다. Physics는
+Physics Collision/Simulation이 켜진 지원 단일 Body Primitive를 하나 이상
+요구합니다. 유효한 Mesh의 Static Mesh 또는 Shape Component를 지원하며
+Instanced Static Mesh는 제외합니다.
+
+## DoesNotFitGate는 무엇을 의미하나요?
 
 해당 Transit에서 Actor가 포털의 사용 가능한 입구 안에 들어가지 않는다는
 의미입니다. **Portal Radius**를 늘리거나 Actor의 Collision Bounds를
 줄이고 Collision 구성을 개선하세요. Portal Actor를 스케일링하면 안
 됩니다.
+
+## Voxel Collision은 무엇을 Bake할 수 있나요?
+
+Instanced가 아닌 Static Mesh의 Sphere, Box, Capsule, Convex Simple
+Collision과 `BoxComponent`, `SphereComponent`, `CapsuleComponent`를
+지원합니다. Tapered Capsule, Level Set, Skinned Triangle Collision과
+Instanced Static Mesh는 지원하지 않습니다.
+
+**Max Voxel Count**는 Actor 전체가 아니라 각 참여 Primitive별 상한입니다.
+기본 출력 경로는 `/Game/WormholePortal/Generated/Voxels`이며, 사용자 지정
+경로도 대소문자를 구분하는 `/Game/` Long Package Directory여야 합니다.
 
 ## Max Portal Depth는 무엇인가요?
 
@@ -113,7 +152,7 @@ Point 및 Spot Light를 전달합니다. Directional Light는 Light Collection
 Subsystem에서 수집될 수 있지만, 현재 Transmission Subsystem은 Directional
 Light 경로를 만들지 않습니다. Rect Light도 전달하지 않습니다.
 
-나머지 제한사항은 [Portal Lighting 문제 해결](../issues/#portal-lighting)을
+나머지 제한사항은 [Portal Lighting 문제 해결](../issues/index.md#portal-lighting)을
 참고하세요.
 
 ## Material Clip은 자동으로 적용되나요?
@@ -122,13 +161,15 @@ Light 경로를 만들지 않습니다. Rect Light도 전달하지 않습니다.
 Transit Clip Material Function을 Actor의 Material에 연결해야 합니다.
 
 Material은 설정된 **Clip Base Index**부터 연속된 Custom Primitive Data
-네 개를 읽습니다. 기본 Index는 `28`입니다.
+네 개를 읽습니다. 기본 Index는 `28`입니다. 제공 함수의 정확한 경로는
+`/WormholePortal/Materials/MaterialFunctions/MF_WPTransitClip`입니다.
 
 ## Material Clip과 Voxel Collision은 무엇이 다른가요?
 
 **Material Clip**은 포털 경계와 겹치는 동안 호환 Mesh가 보이는 방식만
-바꿉니다. **Voxel Collision**은 통과 중 지원되는 Static Mesh의 충돌을
-양쪽 공간에 표현하는 방식을 바꿉니다.
+바꿉니다. **Voxel Collision**은 통과 중 지원되는 Static Mesh 또는
+Box/Sphere/Capsule Shape Component의 충돌을 양쪽 공간에 표현하는 방식을
+바꿉니다.
 
 서로 독립된 기능이므로 하나만 사용하거나, 둘 다 사용하거나, 둘 다 끌 수
 있습니다.
@@ -141,6 +182,28 @@ Editor 모듈은 설정된 **Generated LUT Asset Path**를 프로젝트 Cook
 생성 경로를 바꿨다면 반드시 확인해야 합니다.
 
 코드 기본 경로는 `/Game/WormholePortal/Generated/LUT`입니다.
+
+## 포함된 데모는 어디에서 여나요?
+
+Content Browser에서 **Show Plugin Content**를 켜고 다음 맵을 엽니다.
+
+```text
+/WormholePortal/Demo/Lv_WormholePortal_Content_Demo
+```
+
+`Dev_Demo`는 내부 제작용이며 공개 시작점이 아닙니다. 단계별 확인 항목은
+[데모 가이드](../demo/index.md)를 참고하세요.
+
+## 동적 Cubemap 해상도는 어떻게 선택되나요?
+
+Safe Proxy의 화면 높이 비율을 Project Settings의 **Resolution Tiers**와
+비교합니다. 카메라가 Safe Proxy 내부에 있으면 **Inside SafeProxy
+Resolution**이 우선하고, Tier 배열이 비어 있으면 **Lowest Visible
+Resolution**을 사용합니다.
+
+해상도는 다음 8 배수로 올림되어 `8–2048` 범위로 제한되고, Tier는
+해상도가 줄어드는 순서가 되지 않도록 보정됩니다. 플러그인 내부 VRAM
+Budget으로 이 값을 다시 낮추는 CVar는 없습니다.
 
 ## Runtime 성능은 어떻게 확인하나요?
 
@@ -156,3 +219,19 @@ stat WormholePortal
 ```text
 LogWormhole
 ```
+
+Non-Shipping 빌드에서 Transit 거부 상세 정보가 필요하면 다음 명령을 실행한
+뒤 문제를 다시 재현하세요.
+
+```text
+Log LogWormhole Verbose
+```
+
+`RuntimeReason`, `ResolveReason`, `FailedComponents`를 함께 수집합니다.
+
+## 공식 지원은 어디로 문의하나요?
+
+Team Beaver Studio의 공식 지원 이메일은
+[beavergametech@gmail.com](mailto:beavergametech@gmail.com)입니다. 엔진과
+플러그인 버전, 재현 절차, 기대/실제 결과, `LogWormhole` 로그와 관련 설정을
+함께 보내세요. 자세한 체크리스트는 [호환성 및 지원](../support/index.md)에 있습니다.

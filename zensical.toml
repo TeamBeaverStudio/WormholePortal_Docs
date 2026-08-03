@@ -10,9 +10,11 @@ nav = [
   { "Home" = "index.md" },
   { "Getting Started" = "getting-started/index.md" },
   { "Features" = "features/index.md" },
+  { "Demo" = "demo/index.md" },
   { "Reference" = "reference.md" },
   { "Issues" = "issues/index.md" },
   { "FAQ" = "faq/index.md" },
+  { "Compatibility & Support" = "support/index.md" },
 ]
 extra_css = [
   "stylesheets/header.css",

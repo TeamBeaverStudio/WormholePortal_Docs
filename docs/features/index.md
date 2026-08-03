@@ -1,9 +1,9 @@
 # Features
 
 Wormhole Portal combines a physically inspired spherical portal renderer with
-gameplay systems for transit, traces, audio, light, and World Partition. The
-systems share the same linked-portal and metric model, so the view through a
-portal and the gameplay route lead to the same destination.
+gameplay systems for transit, traces, audio, light, and World Partition. These
+systems use the same linked-pair and metric model, so the rendered view and the
+gameplay route lead to the same destination.
 
 ## Volumetric wormhole rendering
 
@@ -15,96 +15,108 @@ spherical image.
 - **Spatial lensing:** rays bend through the configured wormhole metric.
 - **Continuous destination view:** the linked space remains visible across the
   opening and throat.
-- **Shared LUT rendering:** baked lookup data accelerates the ray mapping. A
-  runtime fallback can generate compatible transient data when enabled.
-- **Adaptive captures:** cubemap resolution changes with visibility and
-  on-screen size, with a separate resolution for the inside of the safe proxy.
+- **Shared LUT rendering:** baked lookup data accelerates ray mapping. When
+  enabled, the runtime fallback can generate compatible transient data
+  asynchronously.
+- **Adaptive captures:** cubemap resolution follows visibility and on-screen
+  size, with a separate resolution inside the safe proxy.
 
-<!-- CAPTURE SLOT F-01: Cinematic in-engine video showing the mouth, throat, strong lensing, and destination view. -->
-
-The capture-quality switches in **Project Settings > Plugins > Wormhole
-Portal > Scene Capture** affect only the portal's cube capture. They do not
-change the player's normal game view.
+Scene-capture show flags in **Project Settings > Plugins > Wormhole Portal**
+affect managed portal cube captures only. They do not change the player's main
+view.
 
 ## Linked pairs and metric controls
 
 Each `WormholePortalActor` links to one other portal. Assigning **Linked
-Portal** creates the reciprocal link and synchronizes the metric values across
-the pair.
-
-Three properties define the shape:
+Portal** creates the reciprocal link and synchronizes the metric across the
+pair.
 
 | Property | Meaning |
 | --- | --- |
-| **Portal Radius** | Radius of the central `l = 0` seam used for physical traversal |
-| **Throat Half Length** | Half of the connected throat length |
-| **Transition Length** | Blend distance between ordinary space and the throat |
+| **Portal Radius** (`ρ`) | Radius of the central seam and physical traversal gate |
+| **Throat Half Length** (`a`) | Half of the connected throat length |
+| **Transition Length** (`T`) | Blend distance between ordinary space and the throat |
 
-The derived mouth radius is `Portal Radius + Throat Half Length`, and the
-transition radius adds **Transition Length** to that result.
+The mouth radius is `ρ + a`; the transition radius is `ρ + a + T`.
 
-!!! warning "Use metric properties, not Actor Scale"
+Keep each Portal Actor's Transform Scale at `(1, 1, 1)`. Author the base metric
+with the three properties before BeginPlay. At runtime, initialize all three
+physical values atomically with **Initialize Physical Metric**. A later
+initialization is accepted only when it preserves the initialized `a/ρ` and
+`T/ρ` ratios.
 
-    Keep each portal's Transform Scale at `(1, 1, 1)`. The metric calculations
-    use the configured dimensions and do not treat Actor Scale as a size
-    control.
+Choose the runtime scale control by intent:
+
+- **Set Uniform Physical Metric Scale** uniformly resizes the physical metric,
+  collision, bounds, LUT selection, and capture resolution. It is an expensive
+  physical change.
+- **Set Portal Visual Scale** changes only the rendered size. It is the
+  recommended control for per-frame growth and does not change collision,
+  metric values, bounds, LUT identity, capture ownership/warmup/cadence, or
+  dynamic resolution.
 
 ## Actor transit
 
-Add `WPTransitComponent` to an actor that must cross a portal. **Transit Type:
-Auto** resolves a compatible strategy from the actor and its movable collision
-components.
+Add `WPTransitComponent` to an Actor that must cross a portal. **Transit Type:
+Auto** resolves a compatible strategy in this order: Character, Projectile,
+Pawn, then Physics.
 
-Supported transit types are:
+Every participating Actor needs actor-owned, Movable, collision-enabled
+Primitive Components that match its transit handler. Physics transit also
+requires at least one supported body with Physics collision enabled and
+simulation running. That body must be either:
 
-- **Character**
-- **Pawn**
-- **Projectile**
-- **Physics**
+- a non-instanced `StaticMeshComponent` with a valid Static Mesh; or
+- a `BoxComponent`, `SphereComponent`, `CapsuleComponent`, or other supported
+  `ShapeComponent`.
 
-During a crossing, the system maintains the relationship between the original
-actor and its counterpart, maps transform and movement through the linked
-portals, and applies a short cooldown to prevent an immediate reverse transit.
-Portal link, metric, movement, and transit relationship state are replicated;
-test the complete gameplay behavior under your project's own network model.
+`InstancedStaticMeshComponent` is not supported as a transit primitive.
 
-<!-- CAPTURE SLOT F-02: Short gameplay video of a Character and a physics object crossing the same portal pair. -->
+During a crossing, the system maintains the Master/Twin relationship, maps
+transform and movement through the linked endpoints, and applies a short
+cooldown to prevent an immediate reverse transit. Portal link, metric,
+movement, and transit relationship state are replicated; validate the complete
+behavior under the replication and relevancy model used by your project.
 
-Two optional presentation and collision tools are available:
+### Material Clip and Voxel Collision
 
-- **Material Clip** writes the sphere-clip center, normal, and radius into four
-  consecutive Custom Primitive Data slots so compatible materials can hide the
-  part crossing the boundary.
-- **Voxel Collision** replaces participating static-mesh collision with a
-  baked box-voxel body while the object is split across the two spaces.
+- **Material Clip** writes clip center, normal, and radius into four consecutive
+  Custom Primitive Data slots. A compatible material function uses those values
+  to hide the portion crossing the boundary.
+- **Voxel Collision** replaces participating collision with baked box voxels
+  while the Master and Twin coexist.
 
-Voxel collision is intended for static meshes with usable simple collision.
-Enable it on the Transit Component, then use **Bake Voxel Body** in that
-component's Details panel.
+Voxel baking supports non-instanced Static Mesh Components with usable Simple
+Collision and Box, Sphere, and Capsule Components. Supported Static Mesh
+Simple Collision elements are Sphere, Box, Capsule, and Convex. **Max Voxel
+Count** applies independently to each baked Primitive, not to an entire Actor or
+Static Mesh asset collection.
+
+Enable **Use Voxel Collision**, then select **Bake Voxel Body** in the Transit
+Component's Details panel.
 
 ## Portal-aware traces
 
 Standard Unreal line traces do not continue through linked portal space. The
-portal-aware APIs detect portals separately on `WPPortalTrace` and continue the
-logical ray from the linked exit.
+portal-aware library detects portals on the reserved `WPPortalTrace` channel
+and resumes the logical ray from the linked exit.
 
 Blueprint and C++ APIs provide:
 
 - single-hit and multi-hit line traces;
 - compact and detailed results;
-- logical distance across every segment;
-- traversal count and per-portal entry/exit events.
+- logical distance across every scene segment; and
+- traversal counts with per-portal entry/exit events.
 
-The project must have a trace channel named `WPPortalTrace`. The plugin can add
-and align this channel from its startup notification; restart the editor after
-the change.
-
-<!-- CAPTURE SLOT F-03: Blueprint or debug-view capture of one line trace entering a portal and continuing from the linked exit. -->
+The project must contain a Trace Channel named `WPPortalTrace`. The startup
+notification can add and align it; restart the Editor after the change. Pass
+the ordinary collision channel for the scene objects you want to hit—never pass
+`WPPortalTrace` as the trace's scene channel.
 
 ## Spatial audio through portals
 
-The audio subsystem discovers spatialized Audio Components and creates a
-re-radiated proxy on the other side of a linked pair.
+The audio subsystem discovers eligible spatialized Audio Components and creates
+a re-radiated proxy on the other side of a linked pair.
 
 - Routes are evaluated independently in both directions.
 - Source-to-entry and exit-to-listener occlusion are tested separately.
@@ -114,21 +126,17 @@ re-radiated proxy on the other side of a linked pair.
 The current model supports one primary listener and one portal hop. Add the
 `WP.PortalAudio.Disabled` tag to an Audio Component or its owner to exclude it.
 
-<!-- CAPTURE SLOT F-04: Video with audible before/after comparison while a spatialized source is heard through a portal and then occluded. -->
-
 ## Point and Spot light transmission
 
-Point and Spot lights that affect an entry portal can produce a synchronized
-proxy at the linked exit. The proxy follows the source transform and light
-properties, restricts illumination to the portal aperture, and can transmit
+Point and Spot Lights that affect an entry endpoint can produce a synchronized
+proxy at the linked exit. The proxy follows source transform and light
+properties, restricts illumination to the aperture, and can transmit
 source-side visibility for shadows.
 
-<!-- CAPTURE SLOT F-05: Short video showing a moving Point or Spot light illuminating geometry through the linked exit. -->
-
-The current light model does not transmit Directional Lights, Global
-Illumination, reflections, volumetrics, translucent shadows, colored shadows,
-lights located inside a portal, or pairs with asymmetric radii. See
-[Issues](../issues/#portal-lighting) before planning a lighting-dependent
+Directional and Rect Lights are not transmitted. Neither are Global
+Illumination, reflections, volumetrics, translucent or colored shadows, lights
+inside a portal, or pairs with asymmetric radii. See
+[Issues](../issues/index.md#portal-lighting) before designing a lighting-dependent
 scene.
 
 ## World Partition destination streaming
@@ -136,38 +144,35 @@ scene.
 In a World Partition level, each portal can keep the linked destination area
 loaded before the player reaches the opening.
 
-- **Streaming Preload Distance** controls when the destination source is
-  requested.
-- **Streaming Release Distance** controls when it can be released.
-- **Streaming Query Interval** controls how often the distance is reevaluated.
-- `IsLinkedPortalAreaReady()` lets gameplay check whether the destination is
-  ready.
+- **Streaming Preload Distance** starts the destination request.
+- **Streaming Release Distance** controls when it may be released.
+- **Streaming Query Interval** controls proximity reevaluation.
+- `IsLinkedPortalAreaReady()` exposes destination readiness to gameplay.
 
-The release distance should remain greater than the preload distance to avoid
-rapid load/unload changes. Destination readiness can block transit until the
-linked area is available.
+Keep release distance greater than preload distance to avoid rapid load/unload
+changes. Transit can be rejected as `NotReady` until the linked area is ready.
 
 ## Editor workflow and diagnostics
 
-The plugin adds two commands under **Tools > Wormhole Portal**:
-
 | Tool | Purpose |
 | --- | --- |
-| **Transit Manager** | Scan actors, report setup problems, and add transit to compatible actors |
-| **Bake All LUTs** | Build shared rendering lookup data for the portals in the current level |
+| **Tools > Wormhole Portal > Transit Manager** | Scan Actors, report exact setup problems, and add transit to compatible Actors |
+| **Tools > Wormhole Portal > Bake All LUTs** | Build the shared rendering LUT catalog for portals in the current level |
+| Transit Component **Bake Voxel Body** | Bake collision data for each supported participating Primitive |
 
-<!-- CAPTURE SLOT F-06: Transit Manager with Ready, Needs Setup, and Not Supported rows visible. -->
-
-Portal actors can draw metric boundaries in the editor. Runtime transit
-debugging is available on `WPTransitComponent`. For broader diagnostics:
+Portal Actors can draw metric boundaries in the Editor, and Transit Components
+can draw active traversal geometry. For broader diagnostics:
 
 - filter **Output Log** by `LogWormhole`;
-- run `stat WormholePortal` for plugin counters and CPU timing;
-- use Unreal's `stat gpu` or GPU Profiler for actual GPU execution cost.
+- enter `Log LogWormhole Verbose` before reproducing a transit rejection in a
+  non-Shipping build;
+- run `stat WormholePortal` for plugin counters and CPU timings; and
+- use `stat gpu` or ProfileGPU for GPU execution cost.
 
 ## Where to go next
 
-- Build a working pair in [Getting Started](../getting-started/).
-- Look up properties, enums, functions, and defaults in
-  [Reference](../reference/).
-- Diagnose known limitations in [Issues](../issues/).
+- Build a pair in [Getting Started](../getting-started/index.md).
+- Explore the included scenarios in [Demo](../demo/index.md).
+- Look up exact defaults and integration examples in
+  [Reference](../reference.md).
+- Diagnose limitations in [Issues](../issues/index.md).

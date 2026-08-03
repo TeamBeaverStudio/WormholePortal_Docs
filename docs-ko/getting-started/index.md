@@ -10,14 +10,12 @@
 - **캐릭터 통과:** 플레이어가 포털 경계를 통과해 연결된 포털에서
   나옵니다.
 
-<!-- CAPTURE SLOT GS-01: 최종 포털 통과 GIF 또는 짧은 영상. -->
-
 ## 시작하기 전에
 
 다음 항목이 필요합니다.
 
 - Unreal Engine 5.8.
-- SM5 이상을 사용하는 Perspective 뷰포트의 Game View.
+- 공식 테스트 환경인 Win64, DX12, SM6의 Perspective Game View.
 - 플레이 가능한 Character Blueprint가 포함된 프로젝트.
 - Fab에서 Wormhole Portal을 추가하고 **Edit > Plugins**에서 활성화한
   뒤 에디터를 다시 시작한 상태.
@@ -37,8 +35,6 @@
 2. 플러그인이 `Config/DefaultEngine.ini`에 `WPPortalTrace`를 추가하고
    플러그인 설정을 새 트레이스 채널에 맞춥니다.
 3. 포털 인식 트레이스를 사용하기 전에 에디터를 다시 시작합니다.
-
-<!-- CAPTURE SLOT GS-02: WPPortalTrace 시작 알림과 작업 버튼. -->
 
 !!! warning "다시 시작 필요"
 
@@ -71,8 +67,6 @@
 반대 방향의 연결은 자동으로 생성됩니다. 첫 번째 포털의 Metric 값도
 연결된 포털에 복사되므로 두 번째 포털을 별도로 설정할 필요가 없습니다.
 
-<!-- CAPTURE SLOT GS-03: Linked Portal, 단위 스케일 및 기본 Metric. -->
-
 !!! warning "액터 스케일을 1로 유지"
 
     두 포털의 Transform Scale을 `(1, 1, 1)`로 유지하세요. 액터의
@@ -100,9 +94,6 @@
 5. **Bake**를 선택합니다.
 6. `LUT ready:`로 시작하는 성공 알림이 표시될 때까지 기다립니다.
 
-<!-- CAPTURE SLOT GS-04: Balanced 및 Current Level Auto 베이크 설정. -->
-<!-- CAPTURE SLOT GS-05: LUT ready 성공 알림. -->
-
 !!! note
 
     Wormhole Portal에는 런타임 대체 경로가 있지만, 이 빠른 시작
@@ -118,8 +109,6 @@
 4. **Transit Enabled**를 선택된 상태로 유지합니다.
 5. **Transit Type**을 **Auto**로 유지합니다.
 6. Blueprint를 **Compile**하고 **Save**합니다.
-
-<!-- CAPTURE SLOT GS-06: Enabled와 Auto가 표시된 WPTransitComponent. -->
 
 !!! tip "여러 액터 설정하기"
 
@@ -137,8 +126,6 @@ Play In Editor를 시작하고 캐릭터로 첫 번째 포털에 접근합니다
 - **☐ 캐릭터 통과:** 경계를 통과해 캐릭터가 연결된 포털에서 나오는지
   확인합니다.
 
-<!-- CAPTURE SLOT GS-07: PIE 포털 화면과 캐릭터가 성공적으로 빠져나오는 장면. -->
-
 !!! success "빠른 시작 완료"
 
     두 항목을 모두 통과하면 포털 쌍을 레벨 디자인과 게임플레이에
@@ -149,9 +136,9 @@ Play In Editor를 시작하고 캐릭터로 첫 번째 포털에 접근합니다
 | 증상 | 확인할 항목 |
 | --- | --- |
 | `WPPortalTrace` 경고가 계속 표시됨 | **Add Automatically**를 선택하고 설정 파일 업데이트가 완료되었는지 확인한 뒤 에디터를 다시 시작합니다. |
-| 포털이 보이지 않음 | **Linked Portal**, 액터의 단위 스케일, SM5 이상을 사용하는 Perspective Game View, 완료된 LUT 베이크를 확인합니다. |
+| 포털이 보이지 않음 | **Linked Portal**, 액터의 단위 스케일, Win64/DX12/SM6 Perspective Game View, 완료된 LUT 베이크를 확인합니다. |
 | 플레이어가 포털을 통과하지 못함 | `WPTransitComponent`, **Transit Type: Auto**, **Transit Enabled** 및 필수 Character 컴포넌트를 확인합니다. |
-| Runtime Log에 `Reason=ActorTooLarge`가 표시됨 | **Portal Radius**를 늘립니다. 포털 Actor Scale은 늘리지 마세요. |
+| Runtime Log에 `RuntimeReason=EWPTransitFailReason::DoesNotFitGate`가 표시됨 | Actor의 투영 통과 단면이 Source Gate/Core Radius 안에 들어가지 않습니다. **Portal Radius**를 늘리거나 Actor Collision Bounds를 수정·축소하고, Portal Actor는 스케일링하지 마세요. |
 | Transit Manager에 `Ready`가 표시되지 않음 | Transit Manager에서 액터를 선택하고 보고된 설정 문제를 해결한 뒤 다시 테스트합니다. |
 | 패키징된 빌드에서 베이크 데이터를 찾지 못함 | 프로젝트의 Cook 디렉터리에 `/Game/WormholePortal/Generated/LUT`가 포함되어 있는지 확인합니다. |
 
@@ -169,16 +156,17 @@ Play In Editor를 시작하고 캐릭터로 첫 번째 포털에 접근합니다
 - Transit Manager 작업 흐름.
 - 머티리얼 클리핑과 복셀 충돌.
 - 포털 인식 트레이스, 오디오, 조명 및 World Partition.
-- 기능 가이드는 [기능](../features/)을 참고하세요.
-- 설정과 인터페이스는 [레퍼런스](../reference/)를 참고하세요.
-- 알려진 문제와 해결 방법은 [문제 해결](../issues/)을 참고하세요.
+- 포함된 전체 예제는 [데모](../demo/index.md)를 참고하세요.
+- 기능 가이드는 [기능](../features/index.md)을 참고하세요.
+- 설정과 인터페이스는 [레퍼런스](../reference.md)를 참고하세요.
+- 알려진 문제와 해결 방법은 [문제 해결](../issues/index.md)을 참고하세요.
 
 !!! warning "생성된 LUT 데이터 Cook"
 
     플러그인은 설정된 **Generated LUT Asset Path**를
     **Project Settings > Packaging > Additional Asset Directories to Cook**와
     동기화합니다. 패키징 전에 기본 경로
-    `/Game/WormholePortal/Generated/LUT` 또는 직접 지정한 경로가
+    `/Game/WormholePortal/Generated/LUT` 또는 직접 지정한 `/Game/...` 경로가
     포함되어 있는지 확인하세요. 기본 설정 항목은 다음과 같습니다.
 
     ```ini
